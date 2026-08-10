@@ -1,6 +1,3 @@
-# SPDX-License-Identifier: AGPL-3.0-only
-# P2P component notice: see THIRD_PARTY_NOTICES.md and
-# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """HTTP JSON data API for the MH3U server — feeds the webui dashboard panel.
 
 A tiny stdlib asyncio HTTP/1.1 server (GET/OPTIONS only) exposing the live
@@ -45,7 +42,7 @@ import collections
 
 import config
 import limits
-from logfilter import SuppressRepeated
+import webui
 
 logger = logging.getLogger("mh3u.api")
 
@@ -67,7 +64,6 @@ class _RingHandler(logging.Handler):
         super().__init__(level=logging.INFO)
         self._buf = collections.deque(maxlen=cap)
         self._lock = threading.Lock()
-        self.addFilter(SuppressRepeated())
         self.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S"))
 
@@ -295,6 +291,9 @@ _ROUTES = {
     "/api/log": ("log", snapshot_log),
 }
 
+# The built-in webui panel (self-contained HTML, zero external deps).
+_PANEL_PATHS = ("/", "/panel", "/webui")
+
 
 def _json_response(writer, code, payload, extra_headers=()):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -312,6 +311,22 @@ def _json_response(writer, code, payload, extra_headers=()):
         "Connection: close\r\n"
         "%s\r\n" % (code, status.get(code, "Error"), len(body),
                     "".join("%s: %s\r\n" % h for h in extra_headers))
+    ).encode("ascii")
+    try:
+        writer.write(headers + body)
+    except Exception:
+        pass
+
+
+def _html_response(writer, code, html):
+    body = html.encode("utf-8")
+    headers = (
+        "HTTP/1.1 %d OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: %d\r\n"
+        "Cache-Control: no-store\r\n"
+        "Connection: close\r\n"
+        "\r\n" % (code, len(body))
     ).encode("ascii")
     try:
         writer.write(headers + body)
@@ -340,9 +355,13 @@ async def _handle(reader, writer):
             return
 
         route_path, _, query = path.partition("?")
+        if route_path in _PANEL_PATHS:
+            _html_response(writer, 200, webui.WEBUI_HTML)
+            return
         if route_path == "/api/":
             _json_response(writer, 200, {
                 "endpoints": sorted(_ROUTES),
+                "panel": "/panel",
                 "hint": "/api/log?tail=200",
             })
             return

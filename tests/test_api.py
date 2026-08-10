@@ -79,6 +79,19 @@ async def _scenario():
         st, _, body = await get("/api/")
         check(st == 200 and "endpoints" in body and "/api/players" in body["endpoints"],
               "endpoint index")
+
+        # --- webui panel --------------------------------------------------
+        st, ct, html = await asyncio.to_thread(
+            lambda: (lambda r: (r.status, r.headers.get("Content-Type"), r.read()))(
+                urllib.request.urlopen(base + "/panel", timeout=5)))
+        check(st == 200 and ct == "text/html; charset=utf-8"
+              and b"MH3U Revival" in html and b"setInterval(tick, 3000)" in html,
+              "webui panel served")
+        st, _, html = await asyncio.to_thread(
+            lambda: (lambda r: (r.status, None, r.read()))(
+                urllib.request.urlopen(base + "/", timeout=5)))
+        check(st == 200 and b"MH3U Revival" in html, "panel at /")
+
         st, _, _ = await get("/api/nope")
         check(st == 404, "unknown route -> 404")
 
