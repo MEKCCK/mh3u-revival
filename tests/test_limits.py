@@ -102,6 +102,7 @@ def test_room_capacity_ceiling():
 
 
 def test_password_room_policy():
+    assert mh.HALL_MAX == 32
     old_enabled = mh.DESTROY_PASSWORD_ROOMS
     mh.DESTROY_PASSWORD_ROOMS = True
     try:
