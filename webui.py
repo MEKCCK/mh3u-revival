@@ -90,7 +90,7 @@ WEBUI_HTML = """<!DOCTYPE html>
   <section>
     <h2 data-i18n="ports">港口</h2>
     <table><thead><tr><th>GID</th><th data-i18n="colTitle">名称</th><th data-i18n="colCount">人数</th><th data-i18n="colMax">上限</th><th data-i18n="colType">类型</th></tr></thead>
-    <tbody id="t_halls"><tr><td colspan="5" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
+    <tbody id="t_halls"><tr><td colspan="4" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
   <section>
     <h2 data-i18n="serverStatus">服务器状态</h2>
@@ -105,6 +105,14 @@ WEBUI_HTML = """<!DOCTYPE html>
 "use strict";
 const $ = id => document.getElementById(id);
 let statusData = {};
+// Raw GIDs are never shown to players — every hex id is mapped to a
+// human-readable label ("0x1006" -> "房间 6", "0x101" -> "港口 1").
+let PORT_LABEL = {};   // hex gid -> port label (built from /api/halls)
+function portLabel(g){ return PORT_LABEL[g] || g; }
+function roomLabel(g){
+  const n = parseInt(String(g).replace("0x",""), 16) & 0xFFF;
+  return isNaN(n) ? g : t("roomShort") + " " + n;
+}
 // If the operator opened the panel as /panel?token=xxx, pass the token along
 // to the API so they see full detail; otherwise the API sanitizes.
 const TOKEN = new URLSearchParams(location.search).get("token") || "";
@@ -130,7 +138,7 @@ const I18N = {
         srvName:"服务器", pubAddr:"公布地址（玩家填写）", portCount:"港口数量",
         startedAt:"启动时间", pwdPolicy:"密码房策略", ev_joined:"加入服务器", ev_left:"离开服务器", ev_portIn:"进入港口", ev_portOut:"离开港口",
         ev_roomNew:"创建房间", ev_roomGone:"房间解散", ev_roomIn:"进入房间", ev_roomOut:"离开房间",
-        titleOnline:"%d 在线", unit:"人" },
+        titleOnline:"%d 在线", roomShort:"房间", portShort:"港口", connErr:"无法连接服务器", unit:"人" },
   en: { online:"Online Players", huntRooms:"Hunt Rooms", uptime:"Uptime", portCap:"Port Capacity", players:"Players", ports:"Ports", serverStatus:"Server Status",
         activity:"Activity", colName:"Name", colOnline:"Online", colRooms:"Rooms", colPorts:"Ports",
         colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Players", colMode:"Mode", colMembers:"Members",
@@ -140,7 +148,7 @@ const I18N = {
         srvName:"Server", pubAddr:"Public address (players use)", portCount:"Ports count",
         startedAt:"Started at", pwdPolicy:"Password rooms", ev_joined:"joined server", ev_left:"left server", ev_portIn:"entered port", ev_portOut:"left port",
         ev_roomNew:"created room", ev_roomGone:"room closed", ev_roomIn:"entered room", ev_roomOut:"left room",
-        titleOnline:"%d online", unit:"players" },
+        titleOnline:"%d online", roomShort:"Raum", portShort:"Hafen", roomShort:"Room", portShort:"Port", connErr:"Server nicht erreichbar", connErr:"Cannot reach the server", unit:"players" },
   ja: { online:"オンライン", huntRooms:"狩猟部屋", uptime:"稼働時間", portCap:"港容量", players:"プレイヤー", ports:"港", serverStatus:"サーバー状態",
         activity:"アクティビティ", colName:"名前", colOnline:"オンライン", colRooms:"部屋", colPorts:"港",
         colHost:"ホスト", colRoomPort:"港", colCount:"人数", colMode:"モード", colMembers:"メンバー",
@@ -150,7 +158,7 @@ const I18N = {
         srvName:"サーバー", pubAddr:"公開アドレス（プレイヤー用）", portCount:"港の数",
         startedAt:"起動時刻", pwdPolicy:"パスワード部屋", ev_joined:"サーバーに参加", ev_left:"サーバーから退出", ev_portIn:"港に入場", ev_portOut:"港から退出",
         ev_roomNew:"部屋を作成", ev_roomGone:"部屋が解散", ev_roomIn:"部屋に入場", ev_roomOut:"部屋から退出",
-        titleOnline:"%d オンライン", unit:"人" },
+        titleOnline:"%d オンライン", roomShort:"部屋", portShort:"港", connErr:"サーバーに接続できません", unit:"人" },
   ko: { online:"온라인 플레이어", huntRooms:"사냥방", uptime:"가동 시간", portCap:"항구 용량", players:"플레이어", ports:"항구", serverStatus:"서버 상태",
         activity:"활동 기록", colName:"이름", colOnline:"온라인", colRooms:"방", colPorts:"항구",
         colHost:"방장", colRoomPort:"항구", colCount:"인원", colMode:"모드", colMembers:"구성원",
@@ -160,7 +168,7 @@ const I18N = {
         srvName:"서버", pubAddr:"공개 주소（플레이어용）", portCount:"항구 수",
         startedAt:"시작 시간", pwdPolicy:"비밀번호 방", ev_joined:"서버 접속", ev_left:"서버 접속 종료", ev_portIn:"항구 입장", ev_portOut:"항구 퇴장",
         ev_roomNew:"방 생성", ev_roomGone:"방 해체", ev_roomIn:"방 입장", ev_roomOut:"방 퇴장",
-        titleOnline:"%d 온라인", unit:"명" },
+        titleOnline:"%d 온라인", roomShort:"방", portShort:"항구", connErr:"서버에 연결할 수 없습니다", unit:"명" },
   fr: { online:"Joueurs en ligne", huntRooms:"Salles de chasse", uptime:"Temps de fonctionnement", portCap:"Capacité du port", players:"Joueurs", ports:"Ports", serverStatus:"État du serveur",
         activity:"Activité", colName:"Nom", colOnline:"En ligne", colRooms:"Salles", colPorts:"Ports",
         colHost:"Hôte", colRoomPort:"Port", colCount:"Joueurs", colMode:"Mode", colMembers:"Membres",
@@ -170,7 +178,7 @@ const I18N = {
         srvName:"Serveur", pubAddr:"Adresse publique (joueurs)", portCount:"Nombre de ports",
         startedAt:"Démarré à", pwdPolicy:"Salles à mot de passe", ev_joined:"a rejoint le serveur", ev_left:"a quitté le serveur", ev_portIn:"est entré au port", ev_portOut:"a quitté le port",
         ev_roomNew:"a créé une salle", ev_roomGone:"salle fermée", ev_roomIn:"est entré en salle", ev_roomOut:"a quitté la salle",
-        titleOnline:"%d en ligne", unit:"joueurs" },
+        titleOnline:"%d en ligne", roomShort:"Salle", portShort:"Port", connErr:"Impossible de joindre le serveur", unit:"joueurs" },
   de: { online:"Online-Spieler", huntRooms:"Jagd-Räume", uptime:"Betriebszeit", portCap:"Hafenkapazität", players:"Spieler", ports:"Häfen", serverStatus:"Serverstatus",
         activity:"Aktivität", colName:"Name", colOnline:"Online", colRooms:"Räume", colPorts:"Häfen",
         colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Spieler", colMode:"Modus", colMembers:"Mitglieder",
@@ -190,7 +198,7 @@ const I18N = {
         srvName:"Servidor", pubAddr:"Dirección pública (jugadores)", portCount:"Nº de puertos",
         startedAt:"Iniciado a las", pwdPolicy:"Salas con contraseña", ev_joined:"se unió al servidor", ev_left:"salió del servidor", ev_portIn:"entró al puerto", ev_portOut:"salió del puerto",
         ev_roomNew:"creó una sala", ev_roomGone:"sala cerrada", ev_roomIn:"entró a la sala", ev_roomOut:"salió de la sala",
-        titleOnline:"%d en línea", unit:"jugadores" },
+        titleOnline:"%d en línea", roomShort:"Sala", portShort:"Puerto", connErr:"No se puede conectar al servidor", unit:"jugadores" },
   ru: { online:"Игроки онлайн", huntRooms:"Охотничьи комнаты", uptime:"Время работы", portCap:"Вместимость порта", players:"Игроки", ports:"Порты", serverStatus:"Состояние сервера",
         activity:"Активность", colName:"Имя", colOnline:"Онлайн", colRooms:"Комнаты", colPorts:"Порты",
         colHost:"Хост", colRoomPort:"Порт", colCount:"Игроков", colMode:"Режим", colMembers:"Участники",
@@ -200,7 +208,7 @@ const I18N = {
         srvName:"Сервер", pubAddr:"Публичный адрес (игроки)", portCount:"Кол-во портов",
         startedAt:"Запущен в", pwdPolicy:"Комнаты с паролем", ev_joined:"подключился к серверу", ev_left:"покинул сервер", ev_portIn:"вошёл в порт", ev_portOut:"покинул порт",
         ev_roomNew:"создал комнату", ev_roomGone:"комната закрыта", ev_roomIn:"вошёл в комнату", ev_roomOut:"покинул комнату",
-        titleOnline:"%d онлайн", unit:"игроков" },
+        titleOnline:"%d онлайн", roomShort:"Комната", portShort:"Порт", connErr:"Нет связи с сервером", unit:"игроков" },
 };
 
 let LANG = "zh";
@@ -230,9 +238,17 @@ $("lang").addEventListener("change", e => {
 
 async function getJ(path){
   const r = await fetch(path, {cache:"no-store"});
-  if (!r.ok) throw new Error(path+" "+r.status);
+  if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
+// Encapsulated data layer — components only ever call Api.*, never fetch.
+const Api = {
+  status:  () => Api.status(),
+  players: () => getJ(apiPath("/api/players")),
+  rooms:   () => getJ(apiPath("/api/rooms")),
+  halls:   () => getJ(apiPath("/api/halls")),
+  events:  (since) => getJ(apiPath("/api/events?since=" + since)),
+};
 
 function renderStatus(){
   const s = statusData;
@@ -247,12 +263,12 @@ function renderStatus(){
 }
 
 async function renderPlayers(){
-  const d = await getJ(apiPath("/api/players"));
+  const d = await Api.players();
   const html = !d.count
     ? '<tr><td colspan="5" class="empty">' + t("emptyPlayers") + "</td></tr>"
     : d.players.map(p =>
         "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + fmtSec(p.uptime_s)
-        + '</td><td>' + (p.rooms||[]).join(" ") + '</td><td>' + (p.halls||[]).join(" ") + "</td></tr>"
+        + '</td><td>' + (p.rooms||[]).map(roomLabel).join(" ") + '</td><td>' + (p.halls||[]).map(portLabel).join(" ") + "</td></tr>"
       ).join("");
   if ($("t_players").innerHTML !== html) $("t_players").innerHTML = html;
   const n = d.count || 0;
@@ -261,17 +277,17 @@ async function renderPlayers(){
 }
 
 async function renderRooms(){
-  const d = await getJ(apiPath("/api/rooms"));
+  const d = await Api.rooms();
   const html = !d.count
     ? '<tr><td colspan="6" class="empty">' + t("emptyRooms") + "</td></tr>"
     : d.rooms.map(r => {
         const full = r.num_participants >= r.max_participants;
         const portGid = (r.attribs && r.attribs[0]) ? "0x" + Number(r.attribs[0]).toString(16) : "-";
-        return "<tr><td>" + esc(r.gid) + '</td><td>' + esc(r.host_name || r.host_pid)
+        return "<tr><td>" + roomLabel(r.gid) + '</td><td>' + esc(r.host_name || r.host_pid)
           + (r.host_name ? ' <span class="badge host">' + t("hostBadge") + "</span>" : "")
           + '</td><td><span class="badge' + (full ? " full" : "") + '">'
           + r.num_participants + "/" + r.max_participants + "</span></td><td>"
-          + esc(r.game_mode) + '</td><td>' + portGid + '</td><td>'
+          + esc(r.game_mode) + '</td><td>' + (portGid === "-" ? "-" : portLabel(portGid)) + '</td><td>'
           + (r.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>";
       }).join("");
   if ($("t_rooms").innerHTML !== html) $("t_rooms").innerHTML = html;
@@ -280,15 +296,16 @@ async function renderRooms(){
 }
 
 async function renderHalls(){
-  const d = await getJ(apiPath("/api/halls"));
+  const d = await Api.halls();
   const ports = d.halls.filter(h => !h.is_lobby);   // lobbies are game plumbing, hide them
   const html = !ports.length
-    ? '<tr><td colspan="5" class="empty">' + t("emptyPorts") + "</td></tr>"
-    : ports.map(h =>
-        "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
+    ? '<tr><td colspan="4" class="empty">' + t("emptyPorts") + "</td></tr>"
+    : ports.map((h, i) => {
+        PORT_LABEL[h.gid] = t("portShort") + " " + (i + 1);
+        return "<tr><td>" + esc(h.name)
         + '</td><td>' + h.num_participants + '</td><td>' + (h.displayed_max != null ? h.displayed_max : h.max_participants)
-        + '</td><td>' + t("typePort") + "</td></tr>"
-      ).join("");
+        + '</td><td>' + t("typePort") + "</td></tr>";
+      }).join("");
   if ($("t_halls").innerHTML !== html) $("t_halls").innerHTML = html;
 }
 
@@ -308,7 +325,7 @@ async function renderSrv(){
 let evSeq = 0;
 async function renderEvents(){
   try {
-    const d = await getJ(apiPath("/api/events?since=" + evSeq));
+    const d = await Api.events(evSeq);
     evSeq = d.seq || evSeq;
     if (!(d.events||[]).length) return;
     const el = $("events");
@@ -321,7 +338,7 @@ async function renderEvents(){
     const frag = d.events.map(e => {
       const who = esc(e.name || e.pid);
       const what = t(keys[e.type] || e.type);
-      const where = e.gid ? " " + esc(e.gid) : "";
+      const where = e.gid ? " " + esc(e.type.indexOf("port") === 0 ? portLabel(e.gid) : roomLabel(e.gid)) : "";
       return '<div class="ev"><span class="t">' + new Date().toTimeString().slice(0,8)
         + '</span><span class="' + (cls[e.type]||"") + '">' + what + '</span> '
         + who + where + "</div>";
@@ -333,8 +350,8 @@ async function renderEvents(){
 
 async function tick(){
   const jobs = [
-    getJ(apiPath("/api/status")).then(d => { statusData = d; $("dot").classList.add("ok"); })
-      .catch(e => { $("dot").classList.remove("ok"); $("sub").textContent = "API: " + e.message; }),
+    Api.status().then(d => { statusData = d; $("dot").classList.add("ok"); })
+      .catch(() => { $("dot").classList.remove("ok"); $("sub").textContent = t("connErr"); }),
     renderPlayers().catch(() => {}),
     renderRooms().catch(() => {}),
     renderHalls().catch(() => {}),
