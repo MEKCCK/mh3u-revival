@@ -902,6 +902,40 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     room_stop_btn = ttk.Button(meshrow, text="Stop mesh", state="disabled")
     room_stop_btn.pack(side="left", padx=8)
 
+    # Marker file coordinating the UAC elevation relaunch: the ELEVATED window
+# touches it when its auto-join starts, so the OLD window can tell "the new
+# window took over" from "the prompt was declined" and avoid launching a
+# second Cemu. Lives in the bundle root (user-writable, not update-protected).
+ELEVATED_FLAG = "_mh3u_elevated_join.flag"
+
+
+def _touch_elevated_flag(root):
+    try:
+        with open(os.path.join(root, ELEVATED_FLAG), "w") as f:
+            f.write("1")
+    except OSError:
+        pass
+
+
+def _clear_elevated_flag(root):
+    try:
+        os.unlink(os.path.join(root, ELEVATED_FLAG))
+    except OSError:
+        pass
+
+
+    def _wait_elevated_handoff(log):
+        """After relaunching elevated, poll for the elevated window's handoff
+        marker. True = the new window took over (abort our flow); False = the
+        prompt was declined / nothing took over (fall back to direct)."""
+        log("[mesh] waiting for the elevated window to take over ...")
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 10.0:
+            if os.path.exists(os.path.join(ROOT_DIR, ELEVATED_FLAG)):
+                return True
+            time.sleep(0.5)
+        return False
+
     def jlog(line):
         fmt = clog.info(line)   # timestamped + leveled (also persisted)
         join_log.configure(state="normal")
@@ -918,12 +952,16 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         def worker():
             try:
+                if auto_join:
+                    _touch_elevated_flag(ROOT_DIR)   # signal the old window: taken over
                 final_ip = mesh_join_to_server(ip, lambda s: app.after(0, jlog, s))
                 if final_ip is None:   # elevation relaunch — new window continues
                     return
                 run_join_flow(ROOT_DIR, final_ip, launch=True,
                               log=lambda s: app.after(0, jlog, s))
             finally:
+                if auto_join:
+                    _clear_elevated_flag(ROOT_DIR)
                 app.after(0, lambda: join_play.configure(state="normal"))
         threading.Thread(target=worker, daemon=True).start()
 
@@ -940,7 +978,12 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                 log("[mesh] %s — connecting directly to %s" % (msg, ip))
                 return ip
         if not maybe_elevate(log, "join"):
-            # Declined/blocked UAC: NEVER block play — fall back to direct.
+            # A UAC relaunch was triggered. If the prompt is accepted, the
+            # ELEVATED window takes over the whole flow (handoff marker) —
+            # abort here so we don't ALSO launch Cemu. If nothing took over
+            # (declined / relaunch failed), fall back to direct play.
+            if _wait_elevated_handoff(log):
+                return None
             log("[mesh] no admin rights (UAC declined?) — connecting directly to %s" % ip)
             return ip
         name, secret = easytier.mesh_identity(ip)
@@ -1005,13 +1048,17 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
         try:
             if action == "join":
                 write_host_ip(os.path.join(ROOT_DIR, SRVFILE_REL), ip_var.get().strip())
-                easytier.relaunch_elevated(["--join"])
+                ok = easytier.relaunch_elevated(["--join"])
             elif action == "host":
-                easytier.relaunch_elevated(["--host", ip])
+                ok = easytier.relaunch_elevated(["--host", ip])
             elif action == "host-play":
-                easytier.relaunch_elevated(["--host-play", ip])
+                ok = easytier.relaunch_elevated(["--host-play", ip])
             else:
-                easytier.relaunch_elevated()
+                ok = easytier.relaunch_elevated()
+            if not ok:
+                log("[mesh] could not relaunch elevated (UAC blocked?) — to use the "
+                    "auto-mesh, right-click the launcher and Run as administrator; "
+                    "continuing without it otherwise.")
         except Exception:
             pass
         return False

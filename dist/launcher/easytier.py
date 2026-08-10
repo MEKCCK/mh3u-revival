@@ -349,8 +349,9 @@ def is_admin():
 
 
 def relaunch_elevated(argv_extra=None):
-    """Relaunch this exe as admin (UAC prompt). Returns True if we spawned the
-    elevated copy. Caller should exit afterwards."""
+    """Relaunch this exe as admin (UAC prompt). Returns True only if the
+    elevated process was actually spawned (ShellExecuteW succeeded). Caller
+    should abort its own flow when True — the new window takes over."""
     if os.name != "nt":
         return False
     extra = list(argv_extra or [])
@@ -360,9 +361,9 @@ def relaunch_elevated(argv_extra=None):
             exe, args = sys.executable, extra + sys.argv[1:]
         else:
             exe, args = sys.executable, [sys.argv[0]] + extra + sys.argv[1:]
-        ctypes.windll.shell32.ShellExecuteW(  # noqa
+        r = ctypes.windll.shell32.ShellExecuteW(  # noqa
             None, "runas", exe, subprocess.list2cmdline(args), None, 1)
-        return True
+        return r > 32   # ShellExecuteW returns >32 on success, <=32 on failure
     except Exception:
         return False
 
