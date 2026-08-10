@@ -44,7 +44,7 @@ def _bool_env(name, default):
 # --- caps (beta-safe defaults; the stress harness raises these via env) ---------------
 MAX_CONNECTIONS           = _int_env("MH3U_MAX_CONNECTIONS", 128)          # global live secure connections
 MAX_CONNECTIONS_PER_IP    = _int_env("MH3U_MAX_CONNECTIONS_PER_IP", 16)    # per source IP (loopback exempt)
-MAX_ROOMS                 = _int_env("MH3U_MAX_ROOMS", 48)                 # global live hunt rooms
+MAX_ROOMS                 = _int_env("MH3U_MAX_ROOMS", 32)                 # global live hunt rooms (32 x 4 = 128 = MAX_CONNECTIONS)
 MAX_ROOM_PARTICIPANTS     = _int_env("MH3U_MAX_ROOM_PARTICIPANTS", 32)     # fail-safe per-room ceiling
 MAX_RUNTIME_COMMUNITIES   = _int_env("MH3U_MAX_RUNTIME_COMMUNITIES", 64)   # global runtime-created halls
 MAX_COMMUNITIES_PER_OWNER = _int_env("MH3U_MAX_COMMUNITIES_PER_OWNER", 4)
