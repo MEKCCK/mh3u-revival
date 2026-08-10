@@ -548,7 +548,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         # Return ALL live rooms regardless of criteria for now (MH3U's search-criteria
         # semantics not mapped yet) so the joiner reliably sees the host's room.
         results = [s.gathering for s in REGISTRY.sessions.values()]
-        logger.info("browse: %d live room(s) gids=%s (pid=%s)",
+        logger.debug("browse: %d live room(s) gids=%s (pid=%s)",
                     len(results), [hex(g.id) for g in results], _pid(client))
         off = getattr(range, "offset", 0) or 0
         size = getattr(range, "size", 0) or 0
@@ -606,24 +606,24 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
     async def get_friend_notification_data(self, client, type):
         # Called right after register on entering online mode. No friend-presence
         # backend yet -> return an empty notification list.
-        logger.info("get_friend_notification_data: type=%s (pid=%s) -> []", type, _pid(client))
+        logger.debug("get_friend_notification_data: type=%s (pid=%s) -> []", type, _pid(client))
         return []
 
     async def get_friend_notification_data_list(self, client, types):
-        logger.info("get_friend_notification_data_list: types=%s (pid=%s) -> []", types, _pid(client))
+        logger.debug("get_friend_notification_data_list: types=%s (pid=%s) -> []", types, _pid(client))
         return []
 
     async def update_notification_data(self, client, type, param1, param2, param3):
         # Called right after entering online mode (once the fp friend-login completes).
         # It's a "set my notification data" op with an empty response; just accept it.
-        logger.info("update_notification_data: type=%s p1=%s p2=%s p3=%r (pid=%s) -> ok",
+        logger.debug("update_notification_data: type=%s p1=%s p2=%s p3=%r (pid=%s) -> ok",
                     type, param1, param2, param3, _pid(client))
         return None
 
     # --- Community (gathering hall) methods --------------------------------
     async def find_official_community(self, client, available_only, range):
         halls = COMMUNITY.officials()
-        logger.info("find_official_community: %d hall(s) (pid=%s)", len(halls), _pid(client))
+        logger.debug("find_official_community: %d hall(s) (pid=%s)", len(halls), _pid(client))
         off = getattr(range, "offset", 0) or 0
         size = getattr(range, "size", 0) or 0
         result = halls[off:off + size] if size else halls[off:]
@@ -653,12 +653,12 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         # "return all officials" so the client's community state populates. Reuses the
         # same PersistentGathering encode that find_official_community already ships OK.
         out = COMMUNITY.by_gids(gids) if gids else COMMUNITY.officials()
-        logger.info("find_community_by_gathering_id: gids=%s -> %d hall(s)", gids, len(out))
+        logger.debug("find_community_by_gathering_id: gids=%s -> %d hall(s)", gids, len(out))
         return out
 
     async def find_community_by_participant(self, client, pid, range):
         out = COMMUNITY.by_participant(pid)
-        logger.info("find_community_by_participant: pid=%s in %d hall(s)", pid, len(out))
+        logger.debug("find_community_by_participant: pid=%s in %d hall(s)", pid, len(out))
         return out
 
     async def join_community(self, client, gid, message, password):

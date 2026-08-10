@@ -90,7 +90,7 @@ for _handler in _log_handlers:
     _handler.addFilter(SuppressRepeated())
 logging.basicConfig(level=logging.INFO, handlers=_log_handlers)
 logger = logging.getLogger("mh3u.server")
-HOURLY_NOTICE = "ORG 的小偷与土皇帝不得入内。"
+HOURLY_NOTICE = "怪物猎人通讯部的小偷与土皇帝不得入内。"
 HOURLY_NOTICE_SECONDS = 60.0 * 60.0
 _PROCESS_STARTED_MONOTONIC = time.monotonic()
 if _log_path:
@@ -314,6 +314,7 @@ def _fatal_bind(port, name, exc):
 
 
 async def main():
+    logger.info(HOURLY_NOTICE)
     s = build_settings()
     reaper.install_rx_stamp()   # stamp last-inbound time on every PRUDP packet (before serving)
     logger.info("MH3U NEX server  |  game_server_id=0x%08X  access_key=%s  nex_version=%d",
