@@ -193,6 +193,11 @@ def snapshot_halls(full=True):
             "is_lobby": gid in getattr(m.COMMUNITY, "lobbies", {}).values(),
             "num_participants": len(c.participants),
             "displayed_population": getattr(pg, "num_participants", None),
+            # Wire max = HALL_MAX + display offset (2 for ports, 1 for lobbies);
+            # the GAME renders max - offset, so expose the player-visible cap.
+            "displayed_max": (getattr(pg, "max_participants", None)
+                              - getattr(c, "offset", 0)
+                              if getattr(c, "offset", 0) else getattr(pg, "max_participants", None)),
             "max_participants": getattr(pg, "max_participants", None),
             "participants": [
                 {"pid": p, "name": m.NAMES.get(p)}

@@ -168,7 +168,7 @@ async function renderHalls(){
     ? '<tr><td colspan="6" class="empty">暂无港口</td></tr>'
     : ports.map(h =>
         "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
-        + '</td><td>' + h.num_participants + '</td><td>' + h.max_participants
+        + '</td><td>' + h.num_participants + '</td><td>' + (h.displayed_max != null ? h.displayed_max : h.max_participants)
         + '</td><td>' + (h.official ? "官方" : "自建")
         + '</td><td>' + (h.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
       ).join("");
