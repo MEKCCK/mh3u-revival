@@ -36,6 +36,7 @@ import protocols
 import reaper
 import limits
 import natcheck
+import api
 
 def _log_dir():
     # Frozen (PyInstaller onefile): sys.executable is the real .exe path (the bundle
@@ -100,8 +101,11 @@ _AUTH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_pr
 # PRUDP logs EVERY packet (pings included) at WARNING — handy while reverse-engineering the
 # handshake, but it floods the log and burns CPU/IO on every packet at scale. Quiet it to
 # ERROR by default; set MH3U_PKT_LOG=1 to restore per-packet tracing for debugging.
+# The patched NintendoClients fork also wire-dumps EVERY RMC request/response at WARNING
+# ("[RMC] REQ ... response wire bytes ...") — same flood, same switch.
 if os.environ.get("MH3U_PKT_LOG") != "1":
-    logging.getLogger("nintendo.nex.prudp").setLevel(logging.ERROR)
+    for _noisy in ("nintendo.nex.prudp", "nintendo.nex.rmc"):
+        logging.getLogger(_noisy).setLevel(logging.ERROR)
 
 
 def build_settings():
@@ -125,7 +129,9 @@ class AuthenticationServer(authentication.AuthenticationServer):
         self.settings = s
 
     async def login(self, client, username):
-        logger.info("LOGIN attempt: username=%r", username)
+        ip = limits.remote_ip(client)
+        logger.info("LOGIN attempt: username=%r from %s (%s)",
+                    username, ip or "-", limits.plane_name(ip))
         user = users.resolve(username)
         if not user:
             logger.warning("  -> unknown username %r (add to users.py)", username)
@@ -163,7 +169,9 @@ class AuthenticationServer(authentication.AuthenticationServer):
         # Old-NEX flow: after loginEx, the game calls RequestTicket(source, target)
         # to obtain the kerberos ticket for the secure server (target). Mint a fresh,
         # self-consistent ticket (client+internal halves share one session key).
-        logger.info("REQUEST_TICKET: source=%s target=%s", source, target)
+        ip = limits.remote_ip(client)
+        logger.info("REQUEST_TICKET: source=%s target=%s from %s (%s)",
+                    source, target, ip or "-", limits.plane_name(ip))
         src = users.by_pid(source) or users.resolve(str(source))
         tgt = users.by_pid(target) or users.by_pid(config.SECURE_SERVER_PID)
         response = rmc.RMCResponse()
@@ -309,6 +317,14 @@ async def main():
 
         logger.info("listening: auth=%s:%d  secure=%s:%d  (Ctrl-C / enter to stop)",
                     config.HOST, config.AUTH_PORT, config.HOST, config.SECURE_PORT)
+        if api.API_ENABLED:
+            try:
+                await stack.enter_async_context(api.serve())
+            except OSError as e:
+                logger.warning("api: could not bind %s:%d (%s); dashboard API off",
+                               api.API_BIND, api.API_PORT, e)
+        else:
+            logger.info("api: dashboard API disabled (MH3U_API=0)")
         await natcheck.start(config.HOST)
         _supervise(protocols.notify_trigger_watcher, "notify-watcher")
         _supervise(reaper.reaper_task, "reaper", respawn=True)

@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import json
+import time
 import secrets
 import zipfile
 import tempfile
@@ -32,6 +33,11 @@ import subprocess
 import threading
 import urllib.request
 from pathlib import Path
+
+import easytier  # embedded EasyTier mesh (unified room networking)
+import clientlog  # unified timestamped/leveled rotating launcher log
+
+clog = clientlog.get_logger()
 
 # ---------------------------------------------------------------------------
 # Constants shared with the .bats / bundle layout
@@ -52,6 +58,10 @@ SERVER_EXE = "server.exe"
 SERVER_PY = "server.py"
 VERSION_FILE = "version.txt"
 
+# Embedded EasyTier runtime lives here (downloaded once on first "room" use;
+# protected so updates never wipe the ~15 MB binaries and force a re-download).
+EASYTIER_DIR_REL = "easytier"
+
 # paths relative to the bundle root (mirror the .bats exactly)
 GAMEDIR_REL = os.path.join("portable", "mlc01", "usr", "title", "00050000", "10118300")
 ACTDIR_REL = os.path.join("portable", "mlc01", "usr", "save", "system", "act", "80000001")
@@ -71,6 +81,7 @@ ACCT_VALID_MARKER = "IsPasswordCacheEnabled=1"
 # NB: `version.txt` is intentionally NOT here; it is rewritten LAST after success.
 PROTECTED_PREFIXES = (
     SRVFILE_REL,                                                      # host IP the user typed
+    EASYTIER_DIR_REL,                                                 # downloaded EasyTier runtime
     os.path.join("portable", "mlc01", "usr", "save"),                # account.dat + game saves
     os.path.join("portable", "mlc01", "usr", "title"),               # the user's game dump
 )
@@ -715,6 +726,82 @@ def _selftest():
     check(assets.get(BUNDLE_ZIP) == "https://x/bundle.zip", "parsed bundle asset URL")
     check(HOST_ZIP in assets, "parsed host asset present")
 
+    print("== easytier unified-mesh identity (no codes) ==")
+    n1, s1 = easytier.mesh_identity("8.8.8.8")
+    n2, s2 = easytier.mesh_identity("8.8.8.8")
+    check(n1 == n2 and s1 == s2, "identity is deterministic per address")
+    check(s1 == easytier.MESH_SECRET, "secret is the baked constant")
+    check(n1 == easytier.mesh_identity(" 8.8.8.8 ")[0], "whitespace normalized")
+    check(n1 == easytier.mesh_identity("8.8.8.8")[0], "case/space stable")
+    check(n1 != easytier.mesh_identity("8.8.8.9")[0], "different servers get different meshes")
+    check(n1.startswith("mh3u-") and len(n1) == len("mh3u-") + 10, "name shape mh3u-<sha10>")
+    check(easytier.mesh_identity("")[0] == "mh3u-none", "empty seed -> inert mesh name")
+
+    print("== easytier NAT difficulty (ported from Terracotta) ==")
+    check(easytier.calc_conn_difficulty("OpenInternet", "Symmetric") == "easiest", "open NAT wins")
+    check(easytier.calc_conn_difficulty("FullCone", "Symmetric") == "simple", "cone pair is simple")
+    check(easytier.calc_conn_difficulty("PortRestricted", "PortRestricted") == "medium", "restricted is medium")
+    check(easytier.calc_conn_difficulty("Symmetric", "Symmetric") == "tough", "symmetric pair is tough")
+    check(easytier.normalize_nat_type("symmetric") == "Symmetric", "nat normalize case")
+    check(easytier.normalize_nat_type("NoPat") == "NoPAT", "nat normalize NoPat->NoPAT")
+    check(easytier.normalize_nat_type("bogus") == "Unknown", "unknown nat -> Unknown")
+    check(easytier.normalize_nat_type(None) == "Unknown", "missing nat -> Unknown")
+
+    print("== easytier peer-list JSON parsing ==")
+    # nested (current easytier-cli) shape — self (node_info) + one peer route
+    nested = json.dumps({
+        "node_info": {"hostname": "mh3u-host-abc", "ipv4_addr": "10.144.144.1/24"},
+        "peer_routes": [{
+            "route": {"hostname": "mh3u-player-123", "ipv4_addr": {"address": "10.144.144.2"}, "cost": 1},
+            "peer": {"stun_info": {"udp_nat_type": "Symmetric"}},
+        }],
+    }).encode()
+    peers = easytier.parse_peer_list(nested)
+    check(len(peers) == 2 and peers[0]["is_self"] and peers[0]["ipv4"] == "10.144.144.1"
+          and peers[1]["hostname"] == "mh3u-player-123"
+          and peers[1]["ipv4"] == "10.144.144.2"
+          and peers[1]["nat_type"] == "Symmetric", "nested peer list parsed")
+    # flat (older easytier-cli) shape
+    flat = json.dumps([{"hostname": "mh3u-host-abc", "ipv4": "10.144.144.1",
+                        "cost": "Local", "nat_type": "FullCone"}]).encode()
+    peers = easytier.parse_peer_list(flat)
+    check(len(peers) == 1 and peers[0]["is_self"] and peers[0]["nat_type"] == "FullCone",
+          "flat peer list parsed")
+    check(easytier.parse_peer_list(b"not json") == [] and easytier.parse_peer_list(b"") == [],
+          "garbage peer JSON -> []")
+    check(easytier.difficulty_hint("tough") != "", "difficulty hint exists")
+
+    print("== client log (clientlog.py) ==")
+    import tempfile
+    import shutil
+    import clientlog
+    tmp = Path(tempfile.mkdtemp(prefix="mh3u_clog_"))
+    old_file = os.environ.get("MH3U_LOG_FILE")
+    try:
+        os.environ["MH3U_LOG_FILE"] = str(tmp / "client.log")
+        cl = clientlog.ClientLog()
+        got = []
+        cl.add_listener(got.append)
+        line = cl.info("hello %d", 7)
+        check(line.startswith(time.strftime("%H:%M:%S"))
+              and "INFO" in line and "hello 7" in line, "line has ts+level+msg")
+        check(got == [line], "listener receives the formatted line")
+        cl.warning("warn %s", "x")
+        persisted = (tmp / "client.log").read_text(encoding="utf-8").splitlines()
+        check(len(persisted) == 2 and any("warn x" in l for l in persisted),
+              "lines persisted to client.log")
+        cl2 = clientlog.ClientLog(max_mb=0.001, backups=1)
+        for i in range(80):
+            cl2.info("rotation-filler-line-%03d-abcdefghijklmnopqrst" % i)
+        names = os.listdir(tmp)
+        check(any(n.startswith("client.log.1") for n in names), "rotation produced client.log.1")
+    finally:
+        if old_file is None:
+            os.environ.pop("MH3U_LOG_FILE", None)
+        else:
+            os.environ["MH3U_LOG_FILE"] = old_file
+        shutil.rmtree(tmp, ignore_errors=True)
+
     print()
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
@@ -724,7 +811,8 @@ def _selftest():
 # GUI  (tkinter — imported lazily so --selftest works without a display)
 # ===========================================================================
 
-def _run_gui(smoke=False):
+def _run_gui(smoke=False, auto_join=False, auto_host=False,
+             auto_host_ip=None, auto_host_play=False):
     # smoke=True builds the whole window (every widget + the update thread) then
     # tears it down after ~0.4s WITHOUT blocking — used by `--smoke` to prove the
     # frozen exe's bundled tkinter and widget construction work headlessly.
@@ -733,6 +821,14 @@ def _run_gui(smoke=False):
 
     ROOT_DIR = bundle_root()
 
+    clog.info("== MH3U Revival launcher starting ==")
+    clog.info("bundle: %s | python %s | %s%s",
+              ROOT_DIR, sys.version.split()[0], sys.platform,
+              " (frozen)" if getattr(sys, "frozen", False) else "")
+    clog.info("easytier: version=%s runtime=%s",
+              easytier.EASYTIER_VERSION,
+              "present" if easytier.binaries_present(ROOT_DIR) else "missing (downloaded on first use)")
+
     app = tk.Tk()
     app.title(APP_TITLE)
     app.geometry("640x520")
@@ -740,6 +836,9 @@ def _run_gui(smoke=False):
 
     # shared update state (set by background thread)
     state = {"remote_tag": None, "assets": {}, "update_available": False}
+
+    # live EasyTier mesh instances (server node + any joiner nodes); stopped on close
+    nets = []
 
     # --- top status strip -------------------------------------------------
     top = ttk.Frame(app, padding=(12, 8))
@@ -790,24 +889,118 @@ def _run_gui(smoke=False):
     join_log = scrolledtext.ScrolledText(join, height=12, wrap="word", state="disabled")
     join_log.pack(fill="both", expand=True)
 
+    # ---- unified auto-mesh (no codes — the server address IS the key) ----
+    meshrow = ttk.Frame(join)
+    meshrow.pack(anchor="w", pady=(0, 8))
+    mesh_status_var = tk.StringVar(
+        value="auto-mesh: if the host's server has one, we join it automatically")
+    ttk.Label(meshrow, textvariable=mesh_status_var, foreground="#555").pack(side="left")
+    room_stop_btn = ttk.Button(meshrow, text="Stop mesh", state="disabled")
+    room_stop_btn.pack(side="left", padx=8)
+
     def jlog(line):
+        fmt = clog.info(line)   # timestamped + leveled (also persisted)
         join_log.configure(state="normal")
-        join_log.insert("end", line + "\n")
+        join_log.insert("end", fmt + "\n")
         join_log.see("end")
         join_log.configure(state="disabled")
 
     def do_join():
         ip = ip_var.get().strip()
+        if not ip:
+            jlog("[Join] Enter the host's IP first.")
+            return
         join_play.configure(state="disabled")
 
         def worker():
             try:
-                run_join_flow(ROOT_DIR, ip, launch=True, log=lambda s: app.after(0, jlog, s))
+                final_ip = mesh_join_to_server(ip, lambda s: app.after(0, jlog, s))
+                if final_ip is None:   # elevation relaunch — new window continues
+                    return
+                run_join_flow(ROOT_DIR, final_ip, launch=True,
+                              log=lambda s: app.after(0, jlog, s))
             finally:
                 app.after(0, lambda: join_play.configure(state="normal"))
         threading.Thread(target=worker, daemon=True).start()
 
     join_play.configure(command=do_join)
+
+    def mesh_join_to_server(ip, log):
+        """Join the host's unified mesh automatically (if it has one) and
+        return the address Cemu should connect to: the server node's virtual
+        IP on the mesh, or the plain host address when there is no mesh.
+        Returns None only when we relaunched elevated (abort this attempt)."""
+        if not easytier.binaries_present(ROOT_DIR):
+            ok, msg = ensure_mesh_binaries(log)
+            if not ok:
+                log("[mesh] %s — connecting directly to %s" % (msg, ip))
+                return ip
+        if not maybe_elevate(log, "join"):
+            return None
+        name, secret = easytier.mesh_identity(ip)
+        log("[mesh] joining %s's unified mesh ..." % ip)
+        net = easytier.EasyTierNet(ROOT_DIR, log=log)
+        ok, msg = net.start(name, secret,
+                            easytier.JOINER_HOSTNAME_PREFIX + secrets.token_hex(3))
+        if not ok:
+            log("[mesh] %s — connecting directly to %s" % (msg, ip))
+            return ip
+        nets.append(net)
+        app.after(0, lambda: room_stop_btn.configure(state="normal"))
+        vip = net.wait_for_server(25, log=log)
+        if not vip:
+            log("[mesh] this server has no mesh (or it is still forming) — "
+                "connecting directly to %s" % ip)
+            return ip
+        log("[mesh] joined the unified room mesh — server is at %s" % vip)
+        return vip
+
+    def stop_mesh():
+        """Disconnect our mesh node(s) — hunts revert to direct if still up."""
+        stopped = []
+        for net in list(nets):
+            if net.is_alive():
+                net.stop()
+                stopped.append(net)
+        for net in stopped:
+            nets.remove(net)
+        app.after(0, lambda: (room_stop_btn.configure(state="disabled"),
+                              mesh_status_var.set("auto-mesh: off (manual direct connect)"),
+                              jlog("[mesh] stopped.") if stopped else jlog("[mesh] no active mesh.")))
+
+    def ensure_mesh_binaries(log):
+        if easytier.binaries_present(ROOT_DIR):
+            return True, ""
+        log("[mesh] EasyTier runtime not found — downloading once (~15 MB)...")
+        ok, msg = easytier.ensure_binaries(ROOT_DIR, log=log)
+        if not ok:
+            log("[mesh] " + msg)
+        return ok, msg
+
+    def maybe_elevate(log, action, ip=None):
+        """EasyTier's TUN driver needs admin rights once on Windows. If we're
+        not elevated, relaunch the launcher elevated and abort this attempt;
+        the new window continues the flow automatically."""
+        if easytier.is_admin():
+            return True
+        log("[mesh] EasyTier needs admin rights once (installs its virtual-network "
+            "driver). Relaunching the launcher elevated — when the UAC prompt is "
+            "accepted, the flow continues automatically.")
+        try:
+            if action == "join":
+                write_host_ip(os.path.join(ROOT_DIR, SRVFILE_REL), ip_var.get().strip())
+                easytier.relaunch_elevated(["--join"])
+            elif action == "host":
+                easytier.relaunch_elevated(["--host", ip])
+            elif action == "host-play":
+                easytier.relaunch_elevated(["--host-play", ip])
+            else:
+                easytier.relaunch_elevated()
+        except Exception:
+            pass
+        return False
+
+    room_stop_btn.configure(command=stop_mesh)
 
     # ---------------- HOST ----------------
     host = ttk.Frame(nb, padding=16)
@@ -829,6 +1022,24 @@ def _run_gui(smoke=False):
                 pass
         ttk.Button(host, text="Open Releases page", command=open_releases).pack(anchor="w", pady=8)
     else:
+        # ---- unified mesh (auto, server-side — no codes, no VPN to install) ----
+        mesh = {"net": None}
+        mesh_frame = ttk.LabelFrame(host, text="Unified room mesh — automatic private network",
+                                    padding=8)
+        mesh_frame.pack(fill="x", pady=(0, 8))
+        ttk.Label(mesh_frame,
+                  text="Starting the server also starts a private mesh that every "
+                       "joiner joins automatically — one unified room, no VPN app, "
+                       "no codes. Public nodes only relay when hole-punching fails.",
+                  foreground="#555", wraplength=560, justify="left").pack(anchor="w")
+        mesh_var = tk.StringVar(value="mesh: starts with the server")
+        ttk.Label(mesh_frame, textvariable=mesh_var, foreground="#0a0",
+                  font=("Consolas", 9)).pack(anchor="w", pady=(4, 0))
+        peers_var = tk.StringVar(value="")
+        peers_lbl = ttk.Label(host, textvariable=peers_var, justify="left",
+                              font=("Consolas", 9), foreground="#444")
+        peers_lbl.pack(anchor="w", pady=(0, 6))
+
         ttk.Label(host, text="Which IP will friends connect to?",
                   font=("Segoe UI", 11, "bold")).pack(anchor="w")
         ipframe = ttk.Frame(host)
@@ -866,29 +1077,96 @@ def _run_gui(smoke=False):
         proc_holder = {"proc": None, "reader": None}
 
         def hlog(line):
+            fmt = clog.info(line)   # timestamped + leveled (also persisted)
             host_log.configure(state="normal")
-            host_log.insert("end", line.rstrip("\n") + "\n")
+            host_log.insert("end", fmt + "\n")
             host_log.see("end")
             host_log.configure(state="disabled")
 
-        def chosen_ip():
-            return (override_var.get().strip() or sel_ip.get().strip() or "127.0.0.1")
+        def poll_peers_loop():
+            """Background dashboard: log mesh join/leave events and refresh the
+            peer/NAT list while the mesh is up."""
+            seen = set()
+            while mesh["net"] is not None and mesh["net"].is_alive():
+                try:
+                    peers = mesh["net"].list_peers()
+                    host_nat = easytier.NAT_UNKNOWN
+                    others = []
+                    for p in peers:
+                        if p["is_self"]:
+                            host_nat = p["nat_type"]
+                        elif p["ipv4"] or p["hostname"]:
+                            others.append(p)
+                    keys = {(p["hostname"], p["ipv4"]) for p in others}
+                    for k in sorted(seen - keys):
+                        hlog("[mesh] player left: %s (%s)" % (k[0] or "?", k[1]))
+                    for p in others:
+                        k = (p["hostname"], p["ipv4"])
+                        if k not in seen:
+                            hlog("[mesh] player joined: %s %s (NAT %s)"
+                                 % (p["hostname"] or "?", p["ipv4"], p["nat_type"]))
+                    seen = keys
+                    lines = []
+                    if not others:
+                        lines.append("  (no players on the mesh yet — friends join by "
+                                     "entering this IP in Join)")
+                    for p in others:
+                        tier = easytier.calc_conn_difficulty(host_nat, p["nat_type"])
+                        lines.append("  %-24s %-15s %-16s %s"
+                                     % (p["hostname"] or "?", p["ipv4"], p["nat_type"],
+                                        easytier.difficulty_hint(tier)))
+                    text = ("On the unified mesh (%d):\n" % len(others)) + "\n".join(lines)
+                    app.after(0, lambda t=text: peers_var.set(t))
+                except Exception:
+                    pass
+                time.sleep(3)
 
-        def start_server(ip=None):
-            if proc_holder["proc"] is not None:
-                hlog("[Host] Server already running.")
-                return
-            ip = ip or chosen_ip()
-            cmd, kind = build_server_command(ROOT_DIR)
-            if not cmd:
-                hlog("[Host] ERROR: no server.exe or server.py found.")
-                return
+        def start_server_mesh(ip):
+            """Start the server-side unified mesh node for the advertised
+            address `ip`. Returns (ok, advertise_address, mesh_ip_or_None);
+            ok=False only when we relaunched elevated (abort the flow)."""
+            if ip in ("127.0.0.1", ""):
+                app.after(0, lambda: mesh_var.set("mesh: off — 127.0.0.1 is loopback-only"))
+                return True, ip, None
+            if not easytier.binaries_present(ROOT_DIR):
+                ok, msg = ensure_mesh_binaries(lambda s: app.after(0, hlog, s))
+                if not ok:
+                    app.after(0, lambda: mesh_var.set("mesh: runtime missing — direct %s" % ip))
+                    return True, ip, None
+            if not maybe_elevate(lambda s: app.after(0, hlog, s), "host", ip):
+                return False, None, None
+            name, secret = easytier.mesh_identity(ip)
+            app.after(0, lambda: mesh_var.set("mesh: forming unified room mesh ..."))
+            net = easytier.EasyTierNet(ROOT_DIR,
+                                       log=lambda s: app.after(0, hlog, s))
+            # Fixed virtual IP: a lone node never gets a DHCP address, so the
+            # server pins one; clients DHCP around it and auto-find us.
+            ok, msg = net.start(name, secret, easytier.SERVER_HOSTNAME,
+                                ipv4=easytier.SERVER_VIRTUAL_IP)
+            if not ok:
+                app.after(0, lambda: mesh_var.set("mesh: off (%s)" % msg))
+                return True, ip, None
+            mesh["net"] = net
+            nets.append(net)
+            vip = net.wait_for_server(60, log=lambda s: app.after(0, hlog, s))
+            if not vip:
+                app.after(0, lambda: mesh_var.set("mesh: failed — direct %s" % ip))
+                return True, ip, None
+            app.after(0, lambda: mesh_var.set("mesh: UP — unified room at %s" % vip))
+            threading.Thread(target=poll_peers_loop, daemon=True).start()
+            return True, vip, vip
+
+        def _spawn_server(advertise, mesh_ip, cmd, kind):
             env = dict(os.environ)
-            env["MH3U_ADVERTISE"] = ip
-            banner_var.set(f"Friends connect to:  {ip}")
+            env["MH3U_ADVERTISE"] = advertise
+            banner_var.set("Friends connect to:  %s" % advertise
+                           + (f"   —   unified mesh: {mesh_ip}" if mesh_ip else ""))
             if not banner.winfo_ismapped():
                 banner.pack(fill="x", pady=6, before=btnrow)
-            hlog(f"[Host] Starting server ({kind}), advertising {ip} ...")
+            hlog(f"[Host] Starting server ({kind}), advertising {advertise} ...")
+            clog.info("server cmd: %s", " ".join(cmd))
+            if mesh_ip:
+                clog.info("mesh: MH3U_ADVERTISE=%s (unified room virtual IP)", advertise)
             try:
                 flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 proc = subprocess.Popen(
@@ -901,6 +1179,7 @@ def _run_gui(smoke=False):
                 return
             proc_holder["proc"] = proc
             start_btn.configure(state="disabled")
+            hostplay_btn.configure(state="disabled")
             stop_btn.configure(state="normal")
 
             def reader():
@@ -915,6 +1194,37 @@ def _run_gui(smoke=False):
             t = threading.Thread(target=reader, daemon=True)
             proc_holder["reader"] = t
             t.start()
+
+        def chosen_ip():
+            return (override_var.get().strip() or sel_ip.get().strip() or "127.0.0.1")
+
+        def start_server(ip=None, also_play=False):
+            if proc_holder["proc"] is not None:
+                hlog("[Host] Server already running.")
+                return
+            ip = ip or chosen_ip()
+            cmd, kind = build_server_command(ROOT_DIR)
+            if not cmd:
+                hlog("[Host] ERROR: no server.exe or server.py found.")
+                return
+            start_btn.configure(state="disabled")
+            hostplay_btn.configure(state="disabled")
+            hlog(f"[Host] Preparing to host for {ip} ...")
+
+            def worker():
+                ok, advertise, mesh_ip = start_server_mesh(ip)
+                if not ok:
+                    # elevation relaunch aborted this attempt — re-enable buttons
+                    app.after(0, lambda: (start_btn.configure(state="normal"),
+                                          hostplay_btn.configure(state="normal")))
+                    return
+                app.after(0, lambda: _spawn_server(advertise, mesh_ip, cmd, kind))
+                if also_play:
+                    final = mesh_ip or ip
+                    run_join_flow(ROOT_DIR, final, launch=True,
+                                  log=lambda s: app.after(0, hlog, s))
+
+            threading.Thread(target=worker, daemon=True).start()
 
         def on_server_exit():
             hlog("[Host] Server stopped.")
@@ -962,17 +1272,10 @@ def _run_gui(smoke=False):
                 hlog(f"[Host] stop error: {e}")
 
         def host_and_play():
-            # Use the SAME picked IP for advertise and for our own Cemu's connect.
-            # They must match: the server publishes each peer's reflexive address
-            # from how they connected, so if we host + play over loopback it hands
-            # 127.0.0.1 to friends and nobody can reach us. Connecting over the
-            # chosen plane (Radmin/Tailscale/LAN) makes the published address
-            # reachable — and works for solo too (you reach your own overlay/LAN
-            # IP locally, no P2P peers to publish to).
-            ip = chosen_ip()
-            start_server(ip)
-            run_join_flow(ROOT_DIR, ip, launch=True,
-                          log=lambda s: app.after(0, hlog, s))
+            # Host the server AND play on the same PC. The mesh (if up) gives
+            # us the server's virtual IP to connect our own Cemu to; without a
+            # mesh we use the chosen address as before.
+            start_server(chosen_ip(), also_play=True)
 
         start_btn.configure(command=lambda: start_server())
         stop_btn.configure(command=stop_server)
@@ -981,6 +1284,9 @@ def _run_gui(smoke=False):
         def on_close():
             if proc_holder["proc"] is not None:
                 stop_server()
+            for net in list(nets):
+                net.stop()
+            nets.clear()
             app.destroy()
         app.protocol("WM_DELETE_WINDOW", on_close)
 
@@ -1071,6 +1377,15 @@ def _run_gui(smoke=False):
 
     threading.Thread(target=check_updates, daemon=True).start()
 
+    # Elevated relaunch continuation: the pre-elevation instance passed its
+    # intent via argv, so this window picks the flow up automatically.
+    if auto_join:
+        app.after(300, lambda: nb.select(join))
+        app.after(600, do_join)
+    if auto_host:
+        app.after(300, lambda: nb.select(host))
+        app.after(600, lambda: start_server(auto_host_ip, also_play=auto_host_play))
+
     if smoke:
         app.after(400, app.destroy)         # construct, settle, auto-close
     app.mainloop()
@@ -1080,7 +1395,19 @@ def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     if "--selftest" in argv:
         return _selftest()
-    _run_gui(smoke="--smoke" in argv)
+    auto_join = "--join" in argv
+    auto_host = "--host" in argv or "--host-play" in argv
+    auto_host_play = "--host-play" in argv
+    auto_host_ip = None
+    if auto_host:
+        flag = "--host-play" if auto_host_play else "--host"
+        try:
+            auto_host_ip = argv[argv.index(flag) + 1]
+        except (ValueError, IndexError):
+            auto_host_ip = None
+    _run_gui(smoke="--smoke" in argv, auto_join=auto_join,
+             auto_host=auto_host, auto_host_ip=auto_host_ip,
+             auto_host_play=auto_host_play)
     return 0
 
 

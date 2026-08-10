@@ -1,0 +1,36 @@
+name: Build client (MH3U_Online.exe)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "dist/launcher/**"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Self-test launcher logic (headless)
+        run: python dist/launcher/launcher.py --selftest
+
+      - name: Build MH3U_Online.exe (PyInstaller onefile, windowed)
+        shell: bash
+        run: |
+          VERSION="dev-$(date +%Y%m%d-%H%M%S)"
+          python dist/launcher/build_launcher.py --stamp "$VERSION"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MH3U_Online
+          path: dist/launcher/dist/

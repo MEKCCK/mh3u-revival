@@ -272,6 +272,10 @@ class SecureConnectionServer(_Trace, secure.SecureConnectionServer):
             client._mh3u_ip = ip
             client._mh3u_ip_counted = True
             limits.ip_add(ip)
+        # Stamped for the dashboard API (player uptime); also reused by logout
+        # to tell apart a stale connection by age.
+        if not hasattr(client, "_mh3u_connected_at"):
+            client._mh3u_connected_at = time.monotonic()
         self._next_cid += 1
         cid = self._next_cid
         # Stamp the cid on the connection so logout() can clean up exactly this

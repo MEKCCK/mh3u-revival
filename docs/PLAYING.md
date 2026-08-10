@@ -21,22 +21,28 @@ Nintendo files, and **online is already switched on for you**. You bring only yo
 1. **Unzip the bundle** anywhere (e.g. `C:\MH3U_Online`). Keep `MH3U_Online.exe`,
    `Cemu_release.exe`, `server.exe`, `resources`, `gameProfiles`, and `portable` together.
 
-2. **Join the host's Tailscale network** ([download](https://tailscale.com/download)) so your
-   PC can reach theirs over the internet, with no router setup: install, sign in, accept the
-   host's invite — **then make sure your client is on the HOST's tailnet, not your own.**
-   Tailscale auto-makes you a personal tailnet, and the invite alone often leaves your client
-   on it (so the host can't see your device). If the host says you're not showing up: switch
-   to *their* tailnet in the Tailscale UI, then **log out and back in** on the app to re-bind
-   (or run `tailscale up --authkey=<key the host gives you> --force-reauth`).
+2. **Join the host's network** — pick whichever the host offers:
+   - **Unified mesh (easiest — no VPN to install):** if the host's server runs
+     the built-in mesh, **Save + Play is all you need** — the launcher joins the
+     host's private virtual LAN automatically (no codes, no Tailscale/Radmin).
+     One-time ~15 MB download + one admin prompt on first use; see
+     [docs/EASYTIER.md](EASYTIER.md). If the host's server has no mesh, the
+     launcher falls back to connecting directly.
+   - **Tailscale:** install ([download](https://tailscale.com/download)), sign in, accept the
+     host's invite — **then make sure your client is on the HOST's tailnet, not your own.**
+     Tailscale auto-makes you a personal tailnet, and the invite alone often leaves your client
+     on it (so the host can't see your device). If the host says you're not showing up: switch
+     to *their* tailnet in the Tailscale UI, then **log out and back in** on the app to re-bind
+     (or run `tailscale up --authkey=<key the host gives you> --force-reauth`).
 
-   The host gives you their Tailscale IP (a `100.x` address). Make sure you can reach it before
-   playing: `tailscale ping <ip>` → "pong".
+     The host gives you their Tailscale IP (a `100.x` address). Make sure you can reach it before
+     playing: `tailscale ping <ip>` → "pong".
 
-   **Prefer Radmin VPN?** Same idea, often less fiddly: install
-   [Radmin VPN](https://www.radmin-vpn.com/), choose **Network → Join an existing network**, and
-   enter the network name + password the host gives you. Both PCs then show `26.x.x.x` IPs — the
-   host gives you *their* `26.x` to enter in the game. Confirm you can reach it first:
-   `ping <host's 26.x>` → reply.
+   - **Prefer Radmin VPN?** Same idea, often less fiddly: install
+     [Radmin VPN](https://www.radmin-vpn.com/), choose **Network → Join an existing network**, and
+     enter the network name + password the host gives you. Both PCs then show `26.x.x.x` IPs — the
+     host gives you *their* `26.x` to enter in the game. Confirm you can reach it first:
+     `ping <host's 26.x>` → reply.
 
 3. **Add your MH3U game files (your "dump")** — the same game data you'd use to play MH3U in
    Cemu (not included; bring your own legal copy). You need both the base game

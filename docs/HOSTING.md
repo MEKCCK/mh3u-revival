@@ -11,13 +11,17 @@ is server-tunable — see `MH3U_HALL_MAX` in the env-var table).
 same all-in-one **MH3U Online Bundle** you play with — `server.exe` already ships inside it. Then:
 
 1. Get your friends onto your **Tailscale** or **Radmin** network (see
-   [section 3](#3-make-the-server-reachable) — that part is the same either way).
+   [section 3](#3-make-the-server-reachable) — that part is the same either way),
+   **or** skip both: **Start Server also starts a unified mesh** — every joiner
+   connects to the same private virtual LAN automatically, no VPN to install and
+   no codes (see [docs/EASYTIER.md](EASYTIER.md)).
 2. Open **`MH3U_Online.exe`** → **Host** tab. Pick the IP your friends will use (it auto-detects
    your Radmin `26.x` / Tailscale `100.x` / LAN address, or type any IP), then click **Start
    Server**. It shows the **address your friends type in** and streams the server log — leave it
-   running.
+   running. If the mesh came up, the banner shows its virtual IP (`10.126.126.1`) too and the
+   dashboard lists players with NAT hints.
 3. To play on the same PC, click **Host + Play (127.0.0.1)** — it starts the server *and* joins it
-   yourself at loopback. Online is already enabled in the bundle.
+   yourself (over the mesh when available). Online is already enabled in the bundle.
 
 That's the whole thing — `server.exe` is self-contained, so you can **skip the rest of this page**.
 

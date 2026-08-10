@@ -57,6 +57,17 @@ If you represent a rights-holder with a concern, please open an issue.
 - ✅ Per-player random unique identity — no central accounts, no sign-up.
 - ✅ **Zero-setup joining:** a ready-to-run bundle with online **pre-enabled** — bring your
   own dump, double-click the launcher, play. No Cemu account/settings fiddling, no Python.
+- ✅ **Unified room mesh (one-click networking):** the server runs one private
+  mesh and every joiner connects to it automatically — the same virtual LAN for
+  everyone on the server, no VPN app to install, no codes. Built on the embedded
+  [EasyTier](https://github.com/EasyTier/EasyTier) P2P mesh (the engine
+  Terracotta embeds); peer NAT types + connection difficulty are shown live for
+  each player, and public nodes relay only when hole-punching fails — see
+  [docs/EASYTIER.md](docs/EASYTIER.md). *First use downloads a ~15 MB runtime +
+  one admin prompt (virtual-network driver), the same as installing Tailscale.*
+- ✅ **Dashboard JSON API:** the server exposes live players / hunt rooms /
+  gathering halls / caps / log lines as JSON over HTTP for a webui panel —
+  see [docs/API.md](docs/API.md).
 
 **Game version:** the **US**, **EU/PAL** and **JP** versions are all tested end-to-end —
 including verified **cross-region rooms** (EU + US, and JP + US, hunting together). An
@@ -152,10 +163,17 @@ Binds UDP `1223` (auth) + `1224` (secure). Players point their patched Cemu at
 Beta is deliberately small (Tailscale, 4 players, one room — the hardened config). Things
 being explored for later — **not promised, and the order isn't fixed**:
 
-- **One-click overlay.** A join-code launcher that sets Tailscale up for the player
-  automatically, so it's "install → paste code → play" with no manual tailnet fiddling.
-- **Relay fallback.** An optional host-run relay for player pairs that can't hole-punch
-  (symmetric NAT / CGNAT), for when even an overlay isn't enough.
+- **One-click networking — shipped as the unified room mesh.** The old
+  "join-code launcher that sets Tailscale up for you" became a built-in mesh:
+  the server owns one EasyTier network, every joiner joins automatically (the
+  server address IS the key), and everyone on the server shares the gathering
+  halls ([docs/EASYTIER.md](docs/EASYTIER.md)). Still to prove: the peer
+  dashboard beyond a handful of hunters, and Windows Defender/AV whitelisting
+  for the downloaded runtime.
+- **Relay fallback — covered by the mesh.** EasyTier's public nodes relay
+  automatically when a player pair can't hole-punch (symmetric NAT / CGNAT).
+  The old standalone host-run-relay idea is only relevant for the non-mesh
+  (bare IP) path.
 - **First-class Linux support.** The experimental community bundle graduating to a maintained
   release artifact — ideally CI-built AppImages from the Cemu fork instead of hand-built ones.
 - **Larger lobbies / community hubs.** *In beta testing now* — the gathering hall holds 16
@@ -202,6 +220,10 @@ is the **[mh3u-revival branch of the Cemu fork](https://github.com/Matt-Wood-23/
   reproducible build recipe) and the `SETUP-ONLINE.sh` launcher.
 - [cemu-re-mcp](https://github.com/Matt-Wood-23/cemu-re-mcp) — the GDB-stub / pymem
   reverse-engineering bridge used to decode MH3U's online protocol and memory layout.
+- [EasyTier](https://github.com/EasyTier/EasyTier) — the Apache-2.0 P2P mesh embedded
+  for the unified-room networking (binaries redistributed unchanged).
+- [Terracotta](https://github.com/MEKCCK/Terracotta) — the pattern for embedding EasyTier
+  (public nodes, RPC-based peer/NAT discovery) that the launcher's mesh module ports.
 - [ghidra-mcp](https://github.com/bethington/ghidra-mcp) (an extended fork of
   [LaurieWired's GhidraMCP](https://github.com/LaurieWired/GhidraMCP)) — the Ghidra MCP
   server used to decompile and reverse-engineer the MH3U binary.

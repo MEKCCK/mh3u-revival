@@ -36,6 +36,7 @@ import asyncio
 import logging
 import socket
 import struct
+import time
 
 import config
 import limits
@@ -48,6 +49,57 @@ NATCHECK_ENABLED = limits._bool_env("MH3U_NATCHECK", True)
 # Request types the real nncs servers answer (echoing the type). 0x66 is sent by
 # the game but intentionally dropped by the real servers, so we drop it too.
 _REPLY_TYPES = (0x65, 0x67)
+
+# --- per-client NAT-behavior observation (vnt-style, observation only) -------
+# vnt classifies a NAT as symmetric when probes from DIFFERENT local sockets
+# come back with DIFFERENT public endpoints (see vnt/src/nat/stun.rs). We can't
+# probe the client, but we see the inverse signal for free: when a client keeps
+# showing up from NEW random source ports, it's the same port-remapping NAT
+# signature. That's a warning sign for P2P hole-punching (the game's peers may
+# end up relayed), so we log a one-time hint per client. Never gates anything.
+_MAX_OBSERVED_IPS = 256          # bound the tracking table (abuse-safe)
+_MAX_PORTS_PER_IP = 8            # distinct ports remembered per client
+_HINT_AFTER_PORTS = 2            # distinct source ports before hinting
+
+_seen = {}      # ip -> (set of source ports, last-seen monotonic)
+_hinted = set() # ips we already warned about (once per session)
+
+
+def _observe_endpoint(host, port):
+    """Record a probe source endpoint; return (hint_text_or_None, n_ports).
+    Fail-open: an internal error returns (None, 0) and never breaks the
+    responder."""
+    try:
+        now = time.monotonic()
+        entry = _seen.get(host)
+        if entry is None:
+            if len(_seen) >= _MAX_OBSERVED_IPS:
+                return None, 0
+            ports = set()
+            entry = (ports, now)
+        else:
+            ports, _last = entry
+        if port not in ports:
+            if len(ports) >= _MAX_PORTS_PER_IP:
+                ports.clear()
+            ports.add(port)
+        _seen[host] = (ports, now)
+        if len(ports) >= _HINT_AFTER_PORTS and host not in _hinted:
+            return ("NAT hint: %s keeps probing from new source ports (%s) — "
+                    "port-remapping (symmetric-ish) NAT signature; its P2P "
+                    "links may fall back to relaying"
+                    % (host, ",".join(str(p) for p in sorted(ports)))), len(ports)
+        return None, len(ports)
+    except Exception:
+        return None, 0
+
+
+def _maybe_hint(host, port):
+    """Observe a probe and log the one-time NAT hint (WARNING so hosts see it)."""
+    hint, _n = _observe_endpoint(host, port)
+    if hint:
+        _hinted.add(host)
+        logger.warning("natcheck: %s", hint)
 
 
 def _ip_u32(dotted):
@@ -66,8 +118,10 @@ class _NatCheckProtocol(asyncio.DatagramProtocol):
             except struct.error:
                 type_ = None
             if type_ == 0x66:
+                _maybe_hint(host, port)
                 return   # real servers silently drop 0x66; mirror that
             if type_ in _REPLY_TYPES:
+                _maybe_hint(host, port)
                 # Co-located host player: their bundle points at 127.0.0.1, so the
                 # observed source is loopback — useless to a remote peer. Substitute
                 # ADVERTISE (same rule as protocols._build_public). The port is still

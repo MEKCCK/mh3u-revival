@@ -14,6 +14,7 @@ beta-safe values, and logs each rejection.
 """
 import os
 import time
+import ipaddress
 import logging
 
 logger = logging.getLogger("mh3u.limits")
@@ -77,6 +78,40 @@ def remote_ip(client):
 
 def is_loopback(ip):
     return bool(ip) and (ip.startswith("127.") or ip in ("::1", "localhost"))
+
+
+# --- reachability-plane classification (diagnostics only) -------------------
+# Which network plane a client reached us on, for the login log. Overlay
+# subnets are checked BEFORE the generic private range because Tailscale's
+# 100.64/10 is private per RFC 6598 and EasyTier/Radmin address space overlaps
+# ordinary LAN blocks. Order: loopback -> known overlays -> private -> public.
+_TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+_RADMIN_NET = ipaddress.ip_network("26.0.0.0/8")
+
+
+def plane_name(ip):
+    """Classify the reachability plane of a client IP ('loopback' | 'overlay
+    (Tailscale)' | 'overlay (Radmin)' | 'private' | 'link-local' | 'public' |
+    'unknown'). Pure diagnostic; fail-open to 'unknown'."""
+    if not ip:
+        return "unknown"
+    try:
+        a = ipaddress.ip_address(str(ip).split("%")[0])
+    except ValueError:
+        return "unknown"
+    if a.is_loopback:
+        return "loopback"
+    if a.version == 4:
+        if a in _TAILSCALE_NET:
+            return "overlay (Tailscale)"
+        if a in _RADMIN_NET:
+            return "overlay (Radmin)"
+    if a.is_private:
+        # includes EasyTier virtual nets (10/8), CGNAT (100.64/10), LANs
+        return "private"
+    if a.is_link_local:
+        return "link-local"
+    return "public"
 
 
 # --- global connection cap -----------------------------------------------------------
