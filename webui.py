@@ -69,8 +69,6 @@ WEBUI_HTML = """<!DOCTYPE html>
 <div class="cards">
   <div class="card"><div class="k" data-i18n="online">在线玩家</div><div class="v" id="c_players">-</div></div>
   <div class="card"><div class="k" data-i18n="huntRooms">狩猎房间</div><div class="v" id="c_rooms">-</div></div>
-  <div class="card"><div class="k" data-i18n="roomCap">房间上限（全服）</div><div class="v" id="c_rooms_cap">-</div></div>
-  <div class="card"><div class="k" data-i18n="connCap">在线上限（全服）</div><div class="v" id="c_conns_cap">-</div></div>
   <div class="card"><div class="k" data-i18n="uptime">运行时长</div><div class="v" id="c_uptime">-</div></div>
   <div class="card"><div class="k" data-i18n="portCap">港口容量</div><div class="v" id="c_caps">-</div></div>
 </div>
@@ -78,8 +76,8 @@ WEBUI_HTML = """<!DOCTYPE html>
 <div class="grid">
   <section>
     <h2 data-i18n="players">玩家</h2>
-    <table><thead><tr><th>PID</th><th data-i18n="colName">名字</th><th data-i18n="colOnline">在线</th><th data-i18n="colIdle">空闲</th><th data-i18n="colRooms">房间</th><th data-i18n="colPorts">港口</th></tr></thead>
-    <tbody id="t_players"><tr><td colspan="6" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
+    <table><thead><tr><th>PID</th><th data-i18n="colName">名字</th><th data-i18n="colOnline">在线</th><th data-i18n="colRooms">房间</th><th data-i18n="colPorts">港口</th></tr></thead>
+    <tbody id="t_players"><tr><td colspan="5" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
   <section>
     <h2 data-i18n="huntRooms">狩猎房间</h2>
@@ -123,108 +121,84 @@ function fmtSec(s){
 
 // ---------------- i18n (8 languages) ----------------
 const I18N = {
-  zh: { online:"在线玩家", huntRooms:"狩猎房间", roomCap:"房间上限（全服）", connCap:"在线上限（全服）",
-        uptime:"运行时长", portCap:"港口容量", players:"玩家", ports:"港口", serverStatus:"服务器状态",
-        activity:"活动记录", colName:"名字", colOnline:"在线", colIdle:"空闲", colRooms:"房间", colPorts:"港口",
+  zh: { online:"在线玩家", huntRooms:"狩猎房间", uptime:"运行时长", portCap:"港口容量", players:"玩家", ports:"港口", serverStatus:"服务器状态",
+        activity:"活动记录", colName:"名字", colOnline:"在线", colRooms:"房间", colPorts:"港口",
         colHost:"房主", colRoomPort:"所在港口", colCount:"人数", colMode:"模式", colMembers:"参与者",
         colTitle:"名称", colMax:"上限", colType:"类型", colKey:"项", colValue:"值",
         emptyPlayers:"暂无玩家", emptyRooms:"暂无房间", emptyPorts:"暂无港口", loading:"加载中…",
         loadFail:"加载失败", noData:"无数据", hostBadge:"房主", typePort:"港口",
-        srvName:"服务器", srvId:"游戏服务器 ID", nexVer:"NEX 版本", listenPorts:"监听端口",
-        pubAddr:"公布地址（玩家填写）", ticketAddr:"票证发布地址（mesh）", portCount:"港口数量",
-        portCapRow:"港口容量", startedAt:"启动时间", pwdPolicy:"密码房策略", pwdOn:"启用（已销毁 %d 个）", pwdOff:"关闭",
-        ev_joined:"加入服务器", ev_left:"离开服务器", ev_portIn:"进入港口", ev_portOut:"离开港口",
+        srvName:"服务器", pubAddr:"公布地址（玩家填写）", portCount:"港口数量",
+        startedAt:"启动时间", pwdPolicy:"密码房策略", ev_joined:"加入服务器", ev_left:"离开服务器", ev_portIn:"进入港口", ev_portOut:"离开港口",
         ev_roomNew:"创建房间", ev_roomGone:"房间解散", ev_roomIn:"进入房间", ev_roomOut:"离开房间",
         titleOnline:"%d 在线", unit:"人" },
-  en: { online:"Online Players", huntRooms:"Hunt Rooms", roomCap:"Room Cap (Global)", connCap:"Connection Cap (Global)",
-        uptime:"Uptime", portCap:"Port Capacity", players:"Players", ports:"Ports", serverStatus:"Server Status",
-        activity:"Activity", colName:"Name", colOnline:"Online", colIdle:"Idle", colRooms:"Rooms", colPorts:"Ports",
+  en: { online:"Online Players", huntRooms:"Hunt Rooms", uptime:"Uptime", portCap:"Port Capacity", players:"Players", ports:"Ports", serverStatus:"Server Status",
+        activity:"Activity", colName:"Name", colOnline:"Online", colRooms:"Rooms", colPorts:"Ports",
         colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Players", colMode:"Mode", colMembers:"Members",
         colTitle:"Name", colMax:"Max", colType:"Type", colKey:"Key", colValue:"Value",
         emptyPlayers:"No players", emptyRooms:"No rooms", emptyPorts:"No ports", loading:"Loading…",
         loadFail:"Load failed", noData:"No data", hostBadge:"HOST", typePort:"Port",
-        srvName:"Server", srvId:"Game Server ID", nexVer:"NEX Version", listenPorts:"Listening ports",
-        pubAddr:"Public address (players use)", ticketAddr:"Ticket address (mesh)", portCount:"Ports count",
-        portCapRow:"Port capacity", startedAt:"Started at", pwdPolicy:"Password rooms", pwdOn:"On (%d destroyed)", pwdOff:"Off",
-        ev_joined:"joined server", ev_left:"left server", ev_portIn:"entered port", ev_portOut:"left port",
+        srvName:"Server", pubAddr:"Public address (players use)", portCount:"Ports count",
+        startedAt:"Started at", pwdPolicy:"Password rooms", ev_joined:"joined server", ev_left:"left server", ev_portIn:"entered port", ev_portOut:"left port",
         ev_roomNew:"created room", ev_roomGone:"room closed", ev_roomIn:"entered room", ev_roomOut:"left room",
         titleOnline:"%d online", unit:"players" },
-  ja: { online:"オンライン", huntRooms:"狩猟部屋", roomCap:"部屋上限（全体）", connCap:"接続上限（全体）",
-        uptime:"稼働時間", portCap:"港容量", players:"プレイヤー", ports:"港", serverStatus:"サーバー状態",
-        activity:"アクティビティ", colName:"名前", colOnline:"オンライン", colIdle:"アイドル", colRooms:"部屋", colPorts:"港",
+  ja: { online:"オンライン", huntRooms:"狩猟部屋", uptime:"稼働時間", portCap:"港容量", players:"プレイヤー", ports:"港", serverStatus:"サーバー状態",
+        activity:"アクティビティ", colName:"名前", colOnline:"オンライン", colRooms:"部屋", colPorts:"港",
         colHost:"ホスト", colRoomPort:"港", colCount:"人数", colMode:"モード", colMembers:"メンバー",
         colTitle:"名前", colMax:"上限", colType:"種類", colKey:"項目", colValue:"値",
         emptyPlayers:"プレイヤーなし", emptyRooms:"部屋なし", emptyPorts:"港なし", loading:"読み込み中…",
         loadFail:"読み込み失敗", noData:"データなし", hostBadge:"ホスト", typePort:"港",
-        srvName:"サーバー", srvId:"ゲームサーバーID", nexVer:"NEX バージョン", listenPorts:"リッスンポート",
-        pubAddr:"公開アドレス（プレイヤー用）", ticketAddr:"チケットアドレス（メッシュ）", portCount:"港の数",
-        portCapRow:"港容量", startedAt:"起動時刻", pwdPolicy:"パスワード部屋", pwdOn:"有効（%d 件破棄）", pwdOff:"無効",
-        ev_joined:"サーバーに参加", ev_left:"サーバーから退出", ev_portIn:"港に入場", ev_portOut:"港から退出",
+        srvName:"サーバー", pubAddr:"公開アドレス（プレイヤー用）", portCount:"港の数",
+        startedAt:"起動時刻", pwdPolicy:"パスワード部屋", ev_joined:"サーバーに参加", ev_left:"サーバーから退出", ev_portIn:"港に入場", ev_portOut:"港から退出",
         ev_roomNew:"部屋を作成", ev_roomGone:"部屋が解散", ev_roomIn:"部屋に入場", ev_roomOut:"部屋から退出",
         titleOnline:"%d オンライン", unit:"人" },
-  ko: { online:"온라인 플레이어", huntRooms:"사냥방", roomCap:"방 상한（전체）", connCap:"접속 상한（전체）",
-        uptime:"가동 시간", portCap:"항구 용량", players:"플레이어", ports:"항구", serverStatus:"서버 상태",
-        activity:"활동 기록", colName:"이름", colOnline:"온라인", colIdle:"유휴", colRooms:"방", colPorts:"항구",
+  ko: { online:"온라인 플레이어", huntRooms:"사냥방", uptime:"가동 시간", portCap:"항구 용량", players:"플레이어", ports:"항구", serverStatus:"서버 상태",
+        activity:"활동 기록", colName:"이름", colOnline:"온라인", colRooms:"방", colPorts:"항구",
         colHost:"방장", colRoomPort:"항구", colCount:"인원", colMode:"모드", colMembers:"구성원",
         colTitle:"이름", colMax:"상한", colType:"유형", colKey:"항목", colValue:"값",
         emptyPlayers:"플레이어 없음", emptyRooms:"방 없음", emptyPorts:"항구 없음", loading:"불러오는 중…",
         loadFail:"불러오기 실패", noData:"데이터 없음", hostBadge:"방장", typePort:"항구",
-        srvName:"서버", srvId:"게임 서버 ID", nexVer:"NEX 버전", listenPorts:"리스닝 포트",
-        pubAddr:"공개 주소（플레이어용）", ticketAddr:"티켓 주소（메시）", portCount:"항구 수",
-        portCapRow:"항구 용량", startedAt:"시작 시간", pwdPolicy:"비밀번호 방", pwdOn:"사용 중（%d개 파기）", pwdOff:"꺼짐",
-        ev_joined:"서버 접속", ev_left:"서버 접속 종료", ev_portIn:"항구 입장", ev_portOut:"항구 퇴장",
+        srvName:"서버", pubAddr:"공개 주소（플레이어용）", portCount:"항구 수",
+        startedAt:"시작 시간", pwdPolicy:"비밀번호 방", ev_joined:"서버 접속", ev_left:"서버 접속 종료", ev_portIn:"항구 입장", ev_portOut:"항구 퇴장",
         ev_roomNew:"방 생성", ev_roomGone:"방 해체", ev_roomIn:"방 입장", ev_roomOut:"방 퇴장",
         titleOnline:"%d 온라인", unit:"명" },
-  fr: { online:"Joueurs en ligne", huntRooms:"Salles de chasse", roomCap:"Limite salles (serveur)", connCap:"Limite connexions (serveur)",
-        uptime:"Temps de fonctionnement", portCap:"Capacité du port", players:"Joueurs", ports:"Ports", serverStatus:"État du serveur",
-        activity:"Activité", colName:"Nom", colOnline:"En ligne", colIdle:"Inactif", colRooms:"Salles", colPorts:"Ports",
+  fr: { online:"Joueurs en ligne", huntRooms:"Salles de chasse", uptime:"Temps de fonctionnement", portCap:"Capacité du port", players:"Joueurs", ports:"Ports", serverStatus:"État du serveur",
+        activity:"Activité", colName:"Nom", colOnline:"En ligne", colRooms:"Salles", colPorts:"Ports",
         colHost:"Hôte", colRoomPort:"Port", colCount:"Joueurs", colMode:"Mode", colMembers:"Membres",
         colTitle:"Nom", colMax:"Max", colType:"Type", colKey:"Champ", colValue:"Valeur",
         emptyPlayers:"Aucun joueur", emptyRooms:"Aucune salle", emptyPorts:"Aucun port", loading:"Chargement…",
         loadFail:"Échec du chargement", noData:"Pas de données", hostBadge:"HÔTE", typePort:"Port",
-        srvName:"Serveur", srvId:"ID serveur de jeu", nexVer:"Version NEX", listenPorts:"Ports d'écoute",
-        pubAddr:"Adresse publique (joueurs)", ticketAddr:"Adresse ticket (mesh)", portCount:"Nombre de ports",
-        portCapRow:"Capacité du port", startedAt:"Démarré à", pwdPolicy:"Salles à mot de passe", pwdOn:"Activé (%d détruites)", pwdOff:"Désactivé",
-        ev_joined:"a rejoint le serveur", ev_left:"a quitté le serveur", ev_portIn:"est entré au port", ev_portOut:"a quitté le port",
+        srvName:"Serveur", pubAddr:"Adresse publique (joueurs)", portCount:"Nombre de ports",
+        startedAt:"Démarré à", pwdPolicy:"Salles à mot de passe", ev_joined:"a rejoint le serveur", ev_left:"a quitté le serveur", ev_portIn:"est entré au port", ev_portOut:"a quitté le port",
         ev_roomNew:"a créé une salle", ev_roomGone:"salle fermée", ev_roomIn:"est entré en salle", ev_roomOut:"a quitté la salle",
         titleOnline:"%d en ligne", unit:"joueurs" },
-  de: { online:"Online-Spieler", huntRooms:"Jagd-Räume", roomCap:"Raumlimit (global)", connCap:"Verbindungslimit (global)",
-        uptime:"Betriebszeit", portCap:"Hafenkapazität", players:"Spieler", ports:"Häfen", serverStatus:"Serverstatus",
-        activity:"Aktivität", colName:"Name", colOnline:"Online", colIdle:"Inaktiv", colRooms:"Räume", colPorts:"Häfen",
+  de: { online:"Online-Spieler", huntRooms:"Jagd-Räume", uptime:"Betriebszeit", portCap:"Hafenkapazität", players:"Spieler", ports:"Häfen", serverStatus:"Serverstatus",
+        activity:"Aktivität", colName:"Name", colOnline:"Online", colRooms:"Räume", colPorts:"Häfen",
         colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Spieler", colMode:"Modus", colMembers:"Mitglieder",
         colTitle:"Name", colMax:"Max", colType:"Typ", colKey:"Feld", colValue:"Wert",
         emptyPlayers:"Keine Spieler", emptyRooms:"Keine Räume", emptyPorts:"Keine Häfen", loading:"Lädt…",
         loadFail:"Laden fehlgeschlagen", noData:"Keine Daten", hostBadge:"HOST", typePort:"Hafen",
-        srvName:"Server", srvId:"Game-Server-ID", nexVer:"NEX-Version", listenPorts:"Lausch-Ports",
-        pubAddr:"Öffentliche Adresse (Spieler)", ticketAddr:"Ticket-Adresse (Mesh)", portCount:"Anzahl Häfen",
-        portCapRow:"Hafenkapazität", startedAt:"Gestartet um", pwdPolicy:"Passwort-Räume", pwdOn:"An (%d zerstört)", pwdOff:"Aus",
-        ev_joined:"dem Server beigetreten", ev_left:"Server verlassen", ev_portIn:"Hafen betreten", ev_portOut:"Hafen verlassen",
+        srvName:"Server", pubAddr:"Öffentliche Adresse (Spieler)", portCount:"Anzahl Häfen",
+        startedAt:"Gestartet um", pwdPolicy:"Passwort-Räume", ev_joined:"dem Server beigetreten", ev_left:"Server verlassen", ev_portIn:"Hafen betreten", ev_portOut:"Hafen verlassen",
         ev_roomNew:"Raum erstellt", ev_roomGone:"Raum geschlossen", ev_roomIn:"Raum betreten", ev_roomOut:"Raum verlassen",
         titleOnline:"%d online", unit:"players" },
-  es: { online:"Jugadores online", huntRooms:"Salas de caza", roomCap:"Límite salas (global)", connCap:"Límite conexiones (global)",
-        uptime:"Tiempo activo", portCap:"Capacidad del puerto", players:"Jugadores", ports:"Puertos", serverStatus:"Estado del servidor",
-        activity:"Actividad", colName:"Nombre", colOnline:"En línea", colIdle:"Inactivo", colRooms:"Salas", colPorts:"Puertos",
+  es: { online:"Jugadores online", huntRooms:"Salas de caza", uptime:"Tiempo activo", portCap:"Capacidad del puerto", players:"Jugadores", ports:"Puertos", serverStatus:"Estado del servidor",
+        activity:"Actividad", colName:"Nombre", colOnline:"En línea", colRooms:"Salas", colPorts:"Puertos",
         colHost:"Anfitrión", colRoomPort:"Puerto", colCount:"Jugadores", colMode:"Modo", colMembers:"Miembros",
         colTitle:"Nombre", colMax:"Máx", colType:"Tipo", colKey:"Campo", colValue:"Valor",
         emptyPlayers:"Sin jugadores", emptyRooms:"Sin salas", emptyPorts:"Sin puertos", loading:"Cargando…",
         loadFail:"Error al cargar", noData:"Sin datos", hostBadge:"ANFITRIÓN", typePort:"Puerto",
-        srvName:"Servidor", srvId:"ID del servidor de juego", nexVer:"Versión NEX", listenPorts:"Puertos de escucha",
-        pubAddr:"Dirección pública (jugadores)", ticketAddr:"Dirección ticket (mesh)", portCount:"Nº de puertos",
-        portCapRow:"Capacidad del puerto", startedAt:"Iniciado a las", pwdPolicy:"Salas con contraseña", pwdOn:"Activado (%d destruidas)", pwdOff:"Desactivado",
-        ev_joined:"se unió al servidor", ev_left:"salió del servidor", ev_portIn:"entró al puerto", ev_portOut:"salió del puerto",
+        srvName:"Servidor", pubAddr:"Dirección pública (jugadores)", portCount:"Nº de puertos",
+        startedAt:"Iniciado a las", pwdPolicy:"Salas con contraseña", ev_joined:"se unió al servidor", ev_left:"salió del servidor", ev_portIn:"entró al puerto", ev_portOut:"salió del puerto",
         ev_roomNew:"creó una sala", ev_roomGone:"sala cerrada", ev_roomIn:"entró a la sala", ev_roomOut:"salió de la sala",
         titleOnline:"%d en línea", unit:"jugadores" },
-  ru: { online:"Игроки онлайн", huntRooms:"Охотничьи комнаты", roomCap:"Лимит комнат (всего)", connCap:"Лимит подключений (всего)",
-        uptime:"Время работы", portCap:"Вместимость порта", players:"Игроки", ports:"Порты", serverStatus:"Состояние сервера",
-        activity:"Активность", colName:"Имя", colOnline:"Онлайн", colIdle:"Простой", colRooms:"Комнаты", colPorts:"Порты",
+  ru: { online:"Игроки онлайн", huntRooms:"Охотничьи комнаты", uptime:"Время работы", portCap:"Вместимость порта", players:"Игроки", ports:"Порты", serverStatus:"Состояние сервера",
+        activity:"Активность", colName:"Имя", colOnline:"Онлайн", colRooms:"Комнаты", colPorts:"Порты",
         colHost:"Хост", colRoomPort:"Порт", colCount:"Игроков", colMode:"Режим", colMembers:"Участники",
         colTitle:"Название", colMax:"Макс.", colType:"Тип", colKey:"Поле", colValue:"Значение",
         emptyPlayers:"Нет игроков", emptyRooms:"Нет комнат", emptyPorts:"Нет портов", loading:"Загрузка…",
         loadFail:"Ошибка загрузки", noData:"Нет данных", hostBadge:"ХОСТ", typePort:"Порт",
-        srvName:"Сервер", srvId:"ID игрового сервера", nexVer:"Версия NEX", listenPorts:"Порты прослушивания",
-        pubAddr:"Публичный адрес (игроки)", ticketAddr:"Адрес билета (mesh)", portCount:"Кол-во портов",
-        portCapRow:"Вместимость порта", startedAt:"Запущен в", pwdPolicy:"Комнаты с паролем", pwdOn:"Вкл. (удалено %d)", pwdOff:"Выкл.",
-        ev_joined:"подключился к серверу", ev_left:"покинул сервер", ev_portIn:"вошёл в порт", ev_portOut:"покинул порт",
+        srvName:"Сервер", pubAddr:"Публичный адрес (игроки)", portCount:"Кол-во портов",
+        startedAt:"Запущен в", pwdPolicy:"Комнаты с паролем", ev_joined:"подключился к серверу", ev_left:"покинул сервер", ev_portIn:"вошёл в порт", ev_portOut:"покинул порт",
         ev_roomNew:"создал комнату", ev_roomGone:"комната закрыта", ev_roomIn:"вошёл в комнату", ev_roomOut:"покинул комнату",
         titleOnline:"%d онлайн", unit:"игроков" },
 };
@@ -269,19 +243,15 @@ function renderStatus(){
     + "  ·  " + t("portCount") + " " + (s.halls ? (s.halls.num_worlds||"-") : "-")
     + "  ·  NEX v" + (s.nex_version||"-") + "  ·  " + (s.started_at||"");
   $("c_uptime").textContent = fmtSec(s.uptime_s);
-  const caps = s.caps||{};
-  $("c_rooms_cap").textContent = caps.rooms != null ? caps.rooms : "-";
-  $("c_conns_cap").textContent = caps.connections != null ? caps.connections : "-";
   $("c_caps").textContent = (s.halls && s.halls.hall_max != null ? s.halls.hall_max : "-") + " " + t("unit");
 }
 
 async function renderPlayers(){
   const d = await getJ(apiPath("/api/players"));
   const html = !d.count
-    ? '<tr><td colspan="6" class="empty">' + t("emptyPlayers") + "</td></tr>"
+    ? '<tr><td colspan="5" class="empty">' + t("emptyPlayers") + "</td></tr>"
     : d.players.map(p =>
         "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + fmtSec(p.uptime_s)
-        + '</td><td>' + fmtSec(p.idle_s)
         + '</td><td>' + (p.rooms||[]).join(" ") + '</td><td>' + (p.halls||[]).join(" ") + "</td></tr>"
       ).join("");
   if ($("t_players").innerHTML !== html) $("t_players").innerHTML = html;
@@ -326,21 +296,10 @@ async function renderSrv(){
   const s = statusData;
   const tb = $("t_srv");
   if (!s){ tb.innerHTML = '<tr><td colspan="2" class="empty">' + t("noData") + "</td></tr>"; return; }
-  const pwd = s.password_room_policy
-    ? (s.password_room_policy.enabled ? t("pwdOn", s.password_room_policy.destroyed||0) : t("pwdOff"))
-    : "-";
   const rows = [
-    [t("srvName"), s.server || "-"],
-    [t("srvId"), s.game_server_id || "-"],
-    [t("nexVer"), s.nex_version != null ? "v" + s.nex_version : "-"],
-    [t("listenPorts"), "auth=" + ((s.ports||{}).auth) + " · secure=" + ((s.ports||{}).secure)
-                       + " · natcheck=" + ((s.ports||{}).natcheck)],
     [t("pubAddr"), s.public_address || s.advertised_address || "-"],
-    [t("ticketAddr"), s.advertised_address || "-"],
     [t("portCount"), s.halls ? (s.halls.num_worlds != null ? s.halls.num_worlds : "-") : "-"],
-    [t("portCapRow"), s.halls ? (s.halls.hall_max != null ? s.halls.hall_max + " " + t("unit") : "-") : "-"],
     [t("startedAt"), s.started_at || "-"],
-    [t("pwdPolicy"), pwd],
   ];
   const html = rows.map(r => "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>").join("");
   if (tb.innerHTML !== html) tb.innerHTML = html;
