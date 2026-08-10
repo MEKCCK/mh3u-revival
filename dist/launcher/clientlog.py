@@ -30,6 +30,11 @@ import time
 import threading
 
 
+HOURLY_NOTICE = "ORG 的小偷与土皇帝不得入内。"
+HOURLY_NOTICE_SECONDS = 60.0 * 60.0
+REPEAT_SUPPRESSION_SECONDS = 60.0
+
+
 def _log_dir():
     """Frozen (PyInstaller onefile): next to the exe (bundle root); else here."""
     if getattr(sys, "frozen", False):
@@ -45,6 +50,10 @@ class ClientLog:
         self._listeners = []
         self._file = None
         self._path = None
+        self._notice_stop = threading.Event()
+        self._notice_thread = None
+        self._recent = {}
+        self._recent_cleanup = 0.0
 
         if max_mb is None:
             try:
@@ -101,8 +110,22 @@ class ClientLog:
             self._file = None
 
     def _emit(self, level, msg):
-        line = self._fmt(level, msg)
+        now = time.monotonic()
         with self._lock:
+            key = (level, msg)
+            previous = self._recent.get(key)
+            if (previous is not None
+                    and now - previous < REPEAT_SUPPRESSION_SECONDS):
+                return None
+            self._recent[key] = now
+            if now >= self._recent_cleanup:
+                cutoff = now - REPEAT_SUPPRESSION_SECONDS
+                self._recent = {
+                    item: timestamp for item, timestamp in self._recent.items()
+                    if timestamp >= cutoff
+                }
+                self._recent_cleanup = now + REPEAT_SUPPRESSION_SECONDS
+            line = self._fmt(level, msg)
             if self._file is not None:
                 try:
                     self._file.write(line + "\n")
@@ -140,6 +163,42 @@ class ClientLog:
             except ValueError:
                 pass
 
+    def start_periodic_notice(self, message=HOURLY_NOTICE,
+                              interval=HOURLY_NOTICE_SECONDS):
+        """Emit a notice every elapsed interval, starting at logger creation."""
+        if self._notice_thread is not None and self._notice_thread.is_alive():
+            return
+        interval = float(interval)
+        if interval <= 0:
+            raise ValueError("periodic notice interval must be positive")
+
+        def run():
+            deadline = time.monotonic() + interval
+            while not self._notice_stop.wait(max(0.0, deadline - time.monotonic())):
+                self.info(message)
+                deadline += interval
+                if deadline <= time.monotonic():
+                    deadline = time.monotonic() + interval
+
+        self._notice_stop.clear()
+        self._notice_thread = threading.Thread(
+            target=run, name="mh3u-hourly-notice", daemon=True)
+        self._notice_thread.start()
+
+    def close(self):
+        """Stop the notice timer and close the current log file."""
+        self._notice_stop.set()
+        thread = self._notice_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        with self._lock:
+            if self._file is not None:
+                try:
+                    self._file.close()
+                except Exception:
+                    pass
+                self._file = None
+
 
 _log = None
 _log_lock = threading.Lock()
@@ -151,4 +210,5 @@ def get_logger():
     with _log_lock:
         if _log is None:
             _log = ClientLog()
+            _log.start_periodic_notice()
         return _log

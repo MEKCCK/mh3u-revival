@@ -105,6 +105,7 @@ a fix, though, so it doesn't get lost in chat.
 - **Joining a friend's game?** → [docs/PLAYING.md](docs/PLAYING.md)
 - **Something not working?** → [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - **How it works / design decisions** → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **日志与中文界面** → [docs/LOGGING_ZH.md](docs/LOGGING_ZH.md)
 
 > **Tried an earlier build and got stuck on the online checkmark** — greyed-out *Network Service*,
 > or *"not linked to a NNID or PNID"*? **That's fixed.** Grab the current bundle and open
