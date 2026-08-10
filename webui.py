@@ -81,8 +81,8 @@ WEBUI_HTML = """<!DOCTYPE html>
   </section>
   <section>
     <h2 data-i18n="huntRooms">狩猎房间</h2>
-    <table><thead><tr><th data-i18n="roomShort">房间</th><th data-i18n="colTitle">名称</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colMode">模式</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
-    <tbody id="t_rooms"><tr><td colspan="7" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
+    <table><thead><tr><th data-i18n="roomShort">房间</th><th data-i18n="colTitle">名称</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
+    <tbody id="t_rooms"><tr><td colspan="6" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
 </div>
 
@@ -139,7 +139,7 @@ function fmtSec(s){
 const I18N = {
   zh: { online:"在线玩家", huntRooms:"狩猎房间", uptime:"运行时长", portCap:"港口容量", players:"玩家", ports:"港口", serverStatus:"服务器状态",
         activity:"活动记录", colName:"名字", colOnline:"在线", colRooms:"房间", colPorts:"港口",
-        colHost:"房主", colRoomPort:"所在港口", colCount:"人数", colMode:"模式", colMembers:"参与者",
+        colHost:"房主", colRoomPort:"所在港口", colCount:"人数", colMembers:"参与者",
         colTitle:"名称", colMax:"上限", colType:"类型", colKey:"项", colValue:"值",
         emptyPlayers:"暂无玩家", emptyRooms:"暂无房间", emptyPorts:"暂无港口", loading:"加载中…",
         loadFail:"加载失败", noData:"无数据", hostBadge:"房主", typePort:"港口",
@@ -149,7 +149,7 @@ const I18N = {
         titleOnline:"%d 在线", memUsage:"内存占用", cpuUsage:"CPU 占用", netUsage:"网络占用", roomShort:"房间", portShort:"港口", connErr:"无法连接服务器", unit:"人" },
   en: { online:"Online Players", huntRooms:"Hunt Rooms", uptime:"Uptime", portCap:"Port Capacity", players:"Players", ports:"Ports", serverStatus:"Server Status",
         activity:"Activity", colName:"Name", colOnline:"Online", colRooms:"Rooms", colPorts:"Ports",
-        colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Players", colMode:"Mode", colMembers:"Members",
+        colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Players", colMembers:"Members",
         colTitle:"Name", colMax:"Max", colType:"Type", colKey:"Key", colValue:"Value",
         emptyPlayers:"No players", emptyRooms:"No rooms", emptyPorts:"No ports", loading:"Loading…",
         loadFail:"Load failed", noData:"No data", hostBadge:"HOST", typePort:"Port",
@@ -160,7 +160,7 @@ const I18N = {
   de: { online:"Online-Spieler", huntRooms:"Jagd-Räume", roomCap:"Raumlimit (global)", connCap:"Verbindungslimit (global)",
         uptime:"Betriebszeit", portCap:"Hafenkapazität", players:"Spieler", ports:"Häfen", serverStatus:"Serverstatus",
         activity:"Aktivität", colName:"Name", colOnline:"Online", colIdle:"Inaktiv", colRooms:"Räume", colPorts:"Häfen",
-        colHost:"Host", colCount:"Spieler", colMode:"Modus", colAttrib:"Attr.", colMembers:"Mitglieder",
+        colHost:"Host", colCount:"Spieler", colAttrib:"Attr.", colMembers:"Mitglieder",
         colTitle:"Name", colMax:"Max", colType:"Typ", colKey:"Feld", colValue:"Wert",
         emptyPlayers:"Keine Spieler", emptyRooms:"Keine Räume", emptyPorts:"Keine Häfen", loading:"Lädt…",
         loadFail:"Laden fehlgeschlagen", noData:"Keine Daten", hostBadge:"HOST", typePort:"Hafen",
@@ -172,7 +172,7 @@ const I18N = {
         titleOnline:"%d online", memUsage:"Speicher", cpuUsage:"CPU", netUsage:"Netzwerk", roomShort:"Raum", portShort:"Hafen", connErr:"Server nicht erreichbar", unit:"Spieler" },
   ja: { online:"オンライン", huntRooms:"狩猟部屋", uptime:"稼働時間", portCap:"港容量", players:"プレイヤー", ports:"港", serverStatus:"サーバー状態",
         activity:"アクティビティ", colName:"名前", colOnline:"オンライン", colRooms:"部屋", colPorts:"港",
-        colHost:"ホスト", colRoomPort:"港", colCount:"人数", colMode:"モード", colMembers:"メンバー",
+        colHost:"ホスト", colRoomPort:"港", colCount:"人数", colMembers:"メンバー",
         colTitle:"名前", colMax:"上限", colType:"種類", colKey:"項目", colValue:"値",
         emptyPlayers:"プレイヤーなし", emptyRooms:"部屋なし", emptyPorts:"港なし", loading:"読み込み中…",
         loadFail:"読み込み失敗", noData:"データなし", hostBadge:"ホスト", typePort:"港",
@@ -182,7 +182,7 @@ const I18N = {
         titleOnline:"%d オンライン", memUsage:"メモリ", cpuUsage:"CPU", netUsage:"ネットワーク", roomShort:"部屋", portShort:"港", connErr:"サーバーに接続できません", unit:"人" },
   ko: { online:"온라인 플레이어", huntRooms:"사냥방", uptime:"가동 시간", portCap:"항구 용량", players:"플레이어", ports:"항구", serverStatus:"서버 상태",
         activity:"활동 기록", colName:"이름", colOnline:"온라인", colRooms:"방", colPorts:"항구",
-        colHost:"방장", colRoomPort:"항구", colCount:"인원", colMode:"모드", colMembers:"구성원",
+        colHost:"방장", colRoomPort:"항구", colCount:"인원", colMembers:"구성원",
         colTitle:"이름", colMax:"상한", colType:"유형", colKey:"항목", colValue:"값",
         emptyPlayers:"플레이어 없음", emptyRooms:"방 없음", emptyPorts:"항구 없음", loading:"불러오는 중…",
         loadFail:"불러오기 실패", noData:"데이터 없음", hostBadge:"방장", typePort:"항구",
@@ -192,7 +192,7 @@ const I18N = {
         titleOnline:"%d 온라인", memUsage:"메모리", cpuUsage:"CPU", netUsage:"네트워크", roomShort:"방", portShort:"항구", connErr:"서버에 연결할 수 없습니다", unit:"명" },
   fr: { online:"Joueurs en ligne", huntRooms:"Salles de chasse", uptime:"Temps de fonctionnement", portCap:"Capacité du port", players:"Joueurs", ports:"Ports", serverStatus:"État du serveur",
         activity:"Activité", colName:"Nom", colOnline:"En ligne", colRooms:"Salles", colPorts:"Ports",
-        colHost:"Hôte", colRoomPort:"Port", colCount:"Joueurs", colMode:"Mode", colMembers:"Membres",
+        colHost:"Hôte", colRoomPort:"Port", colCount:"Joueurs", colMembers:"Membres",
         colTitle:"Nom", colMax:"Max", colType:"Type", colKey:"Champ", colValue:"Valeur",
         emptyPlayers:"Aucun joueur", emptyRooms:"Aucune salle", emptyPorts:"Aucun port", loading:"Chargement…",
         loadFail:"Échec du chargement", noData:"Pas de données", hostBadge:"HÔTE", typePort:"Port",
@@ -202,7 +202,7 @@ const I18N = {
         titleOnline:"%d en ligne", memUsage:"Mémoire", cpuUsage:"CPU", netUsage:"Réseau", roomShort:"Salle", portShort:"Port", connErr:"Impossible de joindre le serveur", unit:"joueurs" },
   de: { online:"Online-Spieler", huntRooms:"Jagd-Räume", uptime:"Betriebszeit", portCap:"Hafenkapazität", players:"Spieler", ports:"Häfen", serverStatus:"Serverstatus",
         activity:"Aktivität", colName:"Name", colOnline:"Online", colRooms:"Räume", colPorts:"Häfen",
-        colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Spieler", colMode:"Modus", colMembers:"Mitglieder",
+        colHost:"Host", colRoomPort:"Hafen", colRoomPort:"Port", colCount:"Spieler", colMembers:"Mitglieder",
         colTitle:"Name", colMax:"Max", colType:"Typ", colKey:"Feld", colValue:"Wert",
         emptyPlayers:"Keine Spieler", emptyRooms:"Keine Räume", emptyPorts:"Keine Häfen", loading:"Lädt…",
         loadFail:"Laden fehlgeschlagen", noData:"Keine Daten", hostBadge:"HOST", typePort:"Hafen",
@@ -212,7 +212,7 @@ const I18N = {
         titleOnline:"%d online", unit:"players" },
   es: { online:"Jugadores online", huntRooms:"Salas de caza", uptime:"Tiempo activo", portCap:"Capacidad del puerto", players:"Jugadores", ports:"Puertos", serverStatus:"Estado del servidor",
         activity:"Actividad", colName:"Nombre", colOnline:"En línea", colRooms:"Salas", colPorts:"Puertos",
-        colHost:"Anfitrión", colRoomPort:"Puerto", colCount:"Jugadores", colMode:"Modo", colMembers:"Miembros",
+        colHost:"Anfitrión", colRoomPort:"Puerto", colCount:"Jugadores", colMembers:"Miembros",
         colTitle:"Nombre", colMax:"Máx", colType:"Tipo", colKey:"Campo", colValue:"Valor",
         emptyPlayers:"Sin jugadores", emptyRooms:"Sin salas", emptyPorts:"Sin puertos", loading:"Cargando…",
         loadFail:"Error al cargar", noData:"Sin datos", hostBadge:"ANFITRIÓN", typePort:"Puerto",
@@ -222,7 +222,7 @@ const I18N = {
         titleOnline:"%d en línea", memUsage:"Memoria", cpuUsage:"CPU", netUsage:"Red", roomShort:"Sala", portShort:"Puerto", connErr:"No se puede conectar al servidor", unit:"jugadores" },
   ru: { online:"Игроки онлайн", huntRooms:"Охотничьи комнаты", uptime:"Время работы", portCap:"Вместимость порта", players:"Игроки", ports:"Порты", serverStatus:"Состояние сервера",
         activity:"Активность", colName:"Имя", colOnline:"Онлайн", colRooms:"Комнаты", colPorts:"Порты",
-        colHost:"Хост", colRoomPort:"Порт", colCount:"Игроков", colMode:"Режим", colMembers:"Участники",
+        colHost:"Хост", colRoomPort:"Порт", colCount:"Игроков", colMembers:"Участники",
         colTitle:"Название", colMax:"Макс.", colType:"Тип", colKey:"Поле", colValue:"Значение",
         emptyPlayers:"Нет игроков", emptyRooms:"Нет комнат", emptyPorts:"Нет портов", loading:"Загрузка…",
         loadFail:"Ошибка загрузки", noData:"Нет данных", hostBadge:"ХОСТ", typePort:"Порт",
@@ -309,7 +309,7 @@ async function renderRooms(){
           + (r.host_name ? ' <span class="badge host">' + t("hostBadge") + "</span>" : "")
           + '</td><td><span class="badge' + (full ? " full" : "") + '">'
           + r.num_participants + "/" + r.max_participants + "</span></td><td>"
-          + esc(r.game_mode) + '</td><td>' + (portGid === "-" ? "-" : portLabel(portGid)) + '</td><td>'
+          + (portGid === "-" ? "-" : portLabel(portGid)) + '</td><td>'
           + (r.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>";
       }).join("");
   if ($("t_rooms").innerHTML !== html) $("t_rooms").innerHTML = html;

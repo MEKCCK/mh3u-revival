@@ -745,18 +745,32 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         return []
 
     async def update_notification_data(self, client, type, param1, param2, param3):
-        # Called right after entering online mode (once the fp friend-login completes).
-        # It's a "set my notification data" op with an empty response; just accept it.
-        # The p3 blob is tab-separated; field 8 is the player's hunter name
-        # (verified from live captures: '...\tYoruaski\t108\t14\t...') — learn it so
-        # the dashboard/panel can show real names instead of blanks.
-        try:
-            if isinstance(param3, str):
-                parts = param3.split("\t")
-                if len(parts) > 8 and parts[8].strip():
-                    NAMES[_pid(client)] = parts[8].strip()
-        except Exception:
-            pass
+         # Called right after entering online mode (once the fp friend-login completes).
+         # It's a "set my notification data" op with an empty response; just accept it.
+         # The p3 blob is tab-separated; field 8 is the player's hunter name
+         # (verified from live captures: '...\tYoruaski\t108\t14\t...') — learn it so
+         # the dashboard/panel can show real names instead of blanks.
+         # Field 3 = the room gid the player is in (hex), field 5 = that room's
+         # own title. The create-request message is a COMMENT, not the name
+         # (verified from logs: create msg='The_Kagura' vs in-room title
+         # '一起狩夥僉745'), so the title is the authoritative room name.
+         try:
+             if isinstance(param3, str):
+                 parts = param3.split("\t")
+                 if len(parts) > 8 and parts[8].strip():
+                     NAMES[_pid(client)] = parts[8].strip()
+                 if len(parts) > 5 and parts[5].strip() and parts[5].strip() != "Not Login":
+                     gid = None
+                     try:
+                         if parts[3].startswith("0x"):
+                             gid = int(parts[3], 16)
+                     except (ValueError, IndexError):
+                         gid = None
+                     sess = REGISTRY.sessions.get(gid) if gid is not None else None
+                     if sess is not None:
+                         sess.name = parts[5].strip()
+         except Exception:
+             pass
         logger.debug("update_notification_data: type=%s p1=%s p2=%s p3=%r (pid=%s) -> ok",
                     type, param1, param2, param3, _pid(client))
         return None
