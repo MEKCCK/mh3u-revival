@@ -163,6 +163,15 @@ class GatheringRegistry:
         return gone
 
     def create(self, gathering, host_pid):
+        reason = password_room_reason(gathering)
+        if reason is not None:
+            self.password_rooms_destroyed += 1
+            logger.warning(
+                "password-room policy: rejected create host=%s reason=%s",
+                host_pid, reason)
+            # Reject before returning a gid/session key. Returning success after
+            # deleting the registry entry leaves the host in a client-local room.
+            raise common.RMCError("RendezVous::SessionVoid")
         # Global room cap — stops a PID-cycling attacker growing sessions without bound.
         if len(self.sessions) >= limits.MAX_ROOMS:
             logger.warning("room cap: %d live rooms >= MAX_ROOMS(%d); rejecting create by pid=%s",
@@ -176,7 +185,6 @@ class GatheringRegistry:
         gathering.num_participants = 1
         sess = _Session(gid, gathering, host_pid, secrets.token_bytes(32))
         self.sessions[gid] = sess
-        self.reap_password_rooms()
         return sess
 
     def browse(self, criteria):

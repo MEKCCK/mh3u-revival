@@ -112,8 +112,11 @@ def test_password_room_policy():
 
         locked = _session()
         locked.user_password = "1234"
-        removed = reg.create(locked, host_pid=20)
-        assert removed.gid not in reg.sessions
+        try:
+            reg.create(locked, host_pid=20)
+            assert False, "password room create was accepted"
+        except common.RMCError as e:
+            assert "SessionVoid" in str(e), str(e)
         assert reg.password_rooms_destroyed == 1
 
         normal.gathering.user_password_enabled = True
@@ -123,14 +126,20 @@ def test_password_room_policy():
 
         title_locked = _session()
         title_locked.attribs[mh.PASSWORD_ATTR_INDEX] = 1
-        removed = reg.create(title_locked, host_pid=40)
-        assert removed.gid not in reg.sessions
+        try:
+            reg.create(title_locked, host_pid=40)
+            assert False, "MH3U attribute password room create was accepted"
+        except common.RMCError as e:
+            assert "SessionVoid" in str(e), str(e)
         assert reg.password_rooms_destroyed == 3
 
         browse_room = _session()
         browse_room.user_password = "browse-secret"
-        browse = reg.create(browse_room, host_pid=30)
-        assert browse.gid not in reg.sessions
+        try:
+            reg.create(browse_room, host_pid=30)
+            assert False, "password room create was accepted"
+        except common.RMCError as e:
+            assert "SessionVoid" in str(e), str(e)
     finally:
         mh.DESTROY_PASSWORD_ROOMS = old_enabled
     print("  password-room auto-destroy: OK")
