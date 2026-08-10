@@ -185,6 +185,20 @@ WINTUN_DLL = "wintun.dll"
 # wintun.dll ships in the Windows release (TUN driver); Linux/macOS need nothing extra.
 _NEEDED = (CORE_EXE, CLI_EXE) + ((WINTUN_DLL,) if os.name == "nt" else ())
 
+# GitHub release mirrors tried after the official URL stalls/fails (GitHub
+# downloads are slow/blocked on many Chinese networks — the most common reason
+# the mesh bootstrap never completes). Best-effort: a dead mirror just falls
+# through. Override with MH3U_EASYTIER_MIRRORS (comma-separated); each entry
+# is prefixed onto the official release URL.
+_DEFAULT_MIRRORS = (
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://mirror.ghproxy.com/",
+)
+EASYTIER_MIRRORS = [m for m in (
+    [s.strip() for s in os.environ.get("MH3U_EASYTIER_MIRRORS", "").split(",") if s.strip()]
+    or list(_DEFAULT_MIRRORS))]
+
 
 def easytier_dir(root):
     """Runtime dir for the easytier binaries (bundle_root/easytier)."""
@@ -197,10 +211,50 @@ def binaries_present(root):
     return all(os.path.isfile(os.path.join(d, n)) for n in _NEEDED)
 
 
+# Per-attempt budgets: a stalled GitHub download (no bytes for 45s) or a total
+# wall-clock cap (5 min across all mirrors) must FAIL so the launcher falls
+# back to direct play instead of hanging the join flow forever.
+_DL_STALL_SECS = 45.0
+_DL_TOTAL_SECS = 300.0
+_DL_PROGRESS_LOG_SECS = 5.0
+
+
+def _download_with_limits(url, dest, log, t0, deadline):
+    """Download `url` to `dest` with stall/total-deadline limits and progress
+    logs. Raises on failure/timeout; returns (size_bytes, elapsed)."""
+    req = urllib.request.Request(url, headers={"User-Agent": "MH3U-Revival-Launcher"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        total = int(r.headers.get("Content-Length", 0) or 0)
+        with open(dest, "wb") as f:
+            got, last_bytes, last_log, last_progress = 0, 0.0, t0, 0.0
+            while True:
+                if time.monotonic() - t0 > deadline:
+                    raise TimeoutError("download took too long (>%.0fs)" % deadline)
+                buf = r.read(1024 * 256)
+                now = time.monotonic()
+                if not buf:
+                    break
+                f.write(buf)
+                got += len(buf)
+                if got > last_bytes:               # got bytes: reset the stall clock
+                    last_bytes, last_progress = got, now
+                elif now - last_progress > _DL_STALL_SECS:
+                    raise TimeoutError("download stalled (no data for %.0fs)" % _DL_STALL_SECS)
+                if now - last_log > _DL_PROGRESS_LOG_SECS:
+                    last_log = now
+                    if total:
+                        log("  ... %.1f / %.1f MB (%.0fs)"
+                            % (got / 1048576.0, total / 1048576.0, now - t0))
+                    else:
+                        log("  ... %.1f MB (%.0fs)" % (got / 1048576.0, now - t0))
+    return got, time.monotonic() - t0
+
+
 def ensure_binaries(root, log=print):
     """Ensure the easytier binaries exist; download them (pinned release zip)
-    into <root>/easytier/ if not. Returns (ok, message). Never blocks forever:
-    download failures return an actionable error instead of raising."""
+    into <root>/easytier/ if not. Returns (ok, message). NEVER blocks forever:
+    stalled/slow downloads fail after a bounded budget and return an
+    actionable error — the caller then falls back to direct play."""
     if binaries_present(root):
         return True, ""
     d = easytier_dir(root)
@@ -211,25 +265,31 @@ def ensure_binaries(root, log=print):
 
     tmp_zip = os.path.join(d, EASYTIER_ASSET + ".tmp")
     log("downloading EasyTier %s (first run only):" % EASYTIER_VERSION)
-    log("  %s" % EASYTIER_DOWNLOAD)
+    urls = [EASYTIER_DOWNLOAD] + [m + EASYTIER_DOWNLOAD for m in EASYTIER_MIRRORS]
     t0 = time.monotonic()
-    try:
-        req = urllib.request.Request(
-            EASYTIER_DOWNLOAD, headers={"User-Agent": "MH3U-Revival-Launcher"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            with open(tmp_zip, "wb") as f:
-                shutil.copyfileobj(r, f, 1024 * 256)
-    except Exception as e:
+    last_err = "unknown error"
+    for url in urls:
+        if time.monotonic() - t0 > _DL_TOTAL_SECS:
+            _safe_unlink(tmp_zip)
+            return False, ("failed to download EasyTier (gave up after %.0fs across %d "
+                           "source(s)).\n  The bundle's auto-mesh needs the runtime once.\n"
+                           "  You can still play over Tailscale/Radmin/LAN as before."
+                           % (_DL_TOTAL_SECS, len(urls)))
+        log("  %s" % url)
+        try:
+            got, elapsed = _download_with_limits(url, tmp_zip, log, t0, _DL_TOTAL_SECS)
+            log("  got %.1f MB in %.1fs" % (got / 1048576.0, elapsed))
+            break
+        except Exception as e:
+            last_err = str(e)
+            _safe_unlink(tmp_zip)
+            log("  ... that source failed (%s)" % last_err)
+    else:
         _safe_unlink(tmp_zip)
-        return False, ("failed to download EasyTier (%s).\n"
-                       "  The bundle's auto-mesh needs it once.\n"
+        return False, ("failed to download EasyTier (%s; tried %d source(s) for %.0fs).\n"
+                       "  The bundle's auto-mesh needs the runtime once.\n"
                        "  You can still play over Tailscale/Radmin/LAN as before."
-                       % e)
-    try:
-        size_mb = os.path.getsize(tmp_zip) / (1024.0 * 1024.0)
-        log("  got %.1f MB in %.1fs" % (size_mb, time.monotonic() - t0))
-    except OSError:
-        pass
+                       % (last_err, len(urls), time.monotonic() - t0))
     try:
         with zipfile.ZipFile(tmp_zip) as zf:
             names = {Path(n).name: n for n in zf.namelist() if not n.endswith("/")}
