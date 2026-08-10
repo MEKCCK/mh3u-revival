@@ -197,6 +197,7 @@ same hall and enter your room.
 | `MH3U_ROOM_MAX` | `4` | hunters per **hunt room**. This is the game's own P2P limit — **leave it at 4**; the client isn't built for more in one hunt. Exposed only for completeness. |
 | `MH3U_DESTROY_PASSWORD_ROOMS` | `1` | automatically remove hunt rooms carrying an explicit password, password-enabled flag, codeword, or configured locked policy. Set `0` to disable. |
 | `MH3U_PASSWORD_ROOM_SCAN_SECONDS` | `5` | interval for the background password-room scan. Creation and room updates are also checked immediately. |
+| `MH3U_PASSWORD_ATTR_INDEX` | `5` | zero-based MH3U room attribute carrying the password-room marker. The observed retail client sends `attribs[5]=1` for a password room and `0` for a public room. |
 | `MH3U_PASSWORD_POLICY_VALUES` | `2` | comma-separated participation-policy values treated as password-protected when their policy argument is non-zero. |
 | `MH3U_PASSWORD_FLAG_MASK` | `0` | optional numeric/hex mask for a title-specific locked-room bit after it has been identified from a live trace. |
 | `MH3U_NUM_WORLDS` | `1` | number of gathering **worlds** advertised on the world-select screen. Rooms are global (not tied to a world), so one world is honest for a small server; raise to seed more world entries. |

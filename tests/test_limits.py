@@ -121,6 +121,12 @@ def test_password_room_policy():
         assert not reg.sessions
         assert reg.password_rooms_destroyed == 2
 
+        title_locked = _session()
+        title_locked.attribs[mh.PASSWORD_ATTR_INDEX] = 1
+        removed = reg.create(title_locked, host_pid=40)
+        assert removed.gid not in reg.sessions
+        assert reg.password_rooms_destroyed == 3
+
         browse_room = _session()
         browse_room.user_password = "browse-secret"
         browse = reg.create(browse_room, host_pid=30)

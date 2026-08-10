@@ -156,6 +156,7 @@ def snapshot_status():
             "enabled": getattr(m, "DESTROY_PASSWORD_ROOMS", False),
             "destroyed": getattr(m.REGISTRY, "password_rooms_destroyed", 0),
             "scan_seconds": getattr(m, "PASSWORD_ROOM_SCAN_SECONDS", None),
+            "attribute_index": getattr(m, "PASSWORD_ATTR_INDEX", None),
         }
     return out
 

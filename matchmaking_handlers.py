@@ -58,6 +58,7 @@ def _int_set_env(name, default=""):
 
 
 PASSWORD_POLICY_VALUES = _int_set_env("MH3U_PASSWORD_POLICY_VALUES", "2")
+PASSWORD_ATTR_INDEX = limits._int_env("MH3U_PASSWORD_ATTR_INDEX", 5)
 try:
     PASSWORD_FLAG_MASK = int(os.environ.get("MH3U_PASSWORD_FLAG_MASK", "0"), 0)
 except ValueError:
@@ -76,6 +77,14 @@ def password_room_reason(gathering):
         value = getattr(gathering, name, "")
         if value is not None and str(value).strip():
             return "%s is set" % name
+    # MH3U (NEX 3.0.0) does not serialize the later standard password fields.
+    # A live password/plain-room pair shows the title-specific marker in attribs[5]:
+    # password room=1, public room=0. Keep the index configurable for other builds.
+    attribs = getattr(gathering, "attribs", ()) or ()
+    if 0 <= PASSWORD_ATTR_INDEX < len(attribs):
+        value = attribs[PASSWORD_ATTR_INDEX]
+        if value:
+            return "attribs[%d]=%s" % (PASSWORD_ATTR_INDEX, value)
     policy = getattr(gathering, "participation_policy", None)
     argument = getattr(gathering, "policy_argument", 0) or 0
     if policy in PASSWORD_POLICY_VALUES and argument:
@@ -279,9 +288,9 @@ async def password_room_reaper_task(interval=PASSWORD_ROOM_SCAN_SECONDS):
     """Continuously remove sessions that acquire a password after creation."""
     interval = max(1, int(interval))
     logger.info(
-        "password-room policy %s: scan every %ds; policy-values=%s flag-mask=0x%x",
+        "password-room policy %s: scan every %ds; attr-index=%d policy-values=%s flag-mask=0x%x",
         "ON" if DESTROY_PASSWORD_ROOMS else "OFF", interval,
-        sorted(PASSWORD_POLICY_VALUES), PASSWORD_FLAG_MASK)
+        PASSWORD_ATTR_INDEX, sorted(PASSWORD_POLICY_VALUES), PASSWORD_FLAG_MASK)
     while True:
         await asyncio.sleep(interval)
         REGISTRY.reap_password_rooms()
