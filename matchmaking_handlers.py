@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """MH3U matchmaking — server-side logic (Phase 2).
 
 Implements the core gathering-hall loop MH3U uses (confirmed from the .elf: it
@@ -24,6 +27,7 @@ import secrets
 from nintendo.nex import rmc, common, matchmaking
 
 import host_roster_free
+import config
 import limits
 
 logger = logging.getLogger("mh3u.matchmaking")
@@ -50,6 +54,18 @@ def _pid(client):
         except TypeError:
             pass
     return p
+
+
+def _require_mesh_client(client, action):
+    """Reject room actions from a public/direct connection in mesh mode."""
+    if not config.REQUIRE_MESH:
+        return
+    ip = limits.remote_ip(client)
+    if config.is_mesh_address(ip):
+        return
+    logger.warning("mesh policy: REJECT %s pid=%s source=%s (required cidr=%s)",
+                   action, _pid(client), ip, config.MESH_CIDR)
+    raise common.RMCError("RendezVous::SessionVoid")
 
 
 class _Session:
@@ -481,6 +497,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         # village. Bypass the strict decode: create a room with a placeholder gathering and
         # return the gid + session_key the client needs. (Decoding the real session struct +
         # attribs is the follow-up; for now this unblocks hosting a room.)
+        _require_mesh_client(client, "create_matchmake_session")
         host = _pid(client)
         # A host runs one room at a time. Reap any room this pid still owns before opening
         # a new one — kills the cross-reconnect orphan (a stale room from a previous session
@@ -516,6 +533,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         output.buffer(sess.key)
 
     async def create_matchmake_session(self, client, gathering, description, num_participants):
+        _require_mesh_client(client, "create_matchmake_session")
         host = _pid(client)
         sess = REGISTRY.create(gathering, host)
         logger.info("create: gid=0x%x host=%s game_mode=%s max=%s",
@@ -537,6 +555,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         return results[off:off + size] if size else results[off:]
 
     async def join_matchmake_session(self, client, gid, message):
+        _require_mesh_client(client, "join_matchmake_session")
         pid = _pid(client)
         await _prefree_host_slot(pid)   # clear any stale host slot (hard-drop rejoin)
         key = REGISTRY.join(gid, pid)
@@ -550,6 +569,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         # -> OverflowError "Buffer overflow" -> 0x80040001 -> joiner kicked. Exact same phantom-u16 bug
         # as create (m6). Decode only what MH3U sends, register the joiner as a participant, and return
         # the room's session_key (output.buffer) so the joiner can open the P2P link to the host.
+        _require_mesh_client(client, "join_matchmake_session_ex")
         pid = _pid(client)
         gid = input.u32()
         message, ignore_block_list = "", False

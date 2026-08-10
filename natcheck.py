@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """NAT-check responder — tells each client its OWN address as this server sees it.
 
 Why this exists (the rooms-of-2 bug, 2026-07-05): the game discovers its public

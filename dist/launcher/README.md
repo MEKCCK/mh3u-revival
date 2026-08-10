@@ -21,7 +21,14 @@ showing the bundle version and update state.
   format to the .bat / `make_account.py` (random PID `0x40000000–0x6fffffff`,
   random TransferableIdBase/Uuid/AccountPasswordCache, stock Mii,
   `AccountId=CemuMH3U<last4>`, LF line endings);
-- writes the host IP to `portable\mh3u_server.txt` (pre-filled if already set);
+- keeps the user-entered public/LAN/VPN server address in
+  `portable\mh3u_mesh_seed.txt`, while `portable\mh3u_server.txt` contains the
+  current Cemu target (normally the server's `10.126.126.x` mesh address);
+- rejects `10.126.126.x` as a first-hop server address so a successful launch
+  cannot seed a different, unreachable EasyTier network on the next run;
+- fails closed when the mesh runtime, UAC elevation, EasyTier core, or server
+  route is unavailable; Cemu is not launched with a public fallback unless the
+  operator explicitly sets `MH3U_ALLOW_DIRECT=1` for a legacy direct server;
 - launches `Cemu_release.exe` from the launcher's own directory
   (skippable with `MH3U_NOLAUNCH=1`, same as the .bat).
 

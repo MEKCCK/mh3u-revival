@@ -192,9 +192,16 @@ Have a request? Open an issue.
 
 ## License
 
-Server code: **GNU AGPL-3.0** (see [LICENSE](LICENSE)). The network-copyleft clause means
-anyone who runs a *modified* version as a server must publish their source — this keeps the
-revival open and prevents closed or commercial forks.
+Original project code: **GNU AGPL-3.0** (see [LICENSE](LICENSE)). The
+network-copyleft clause requires operators of a modified network service to offer its
+Corresponding Source to users. Commercial use is permitted; closed-source network deployment
+of modified AGPL-covered code is not.
+
+Dependency licenses and redistribution notices are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Rules for project-operated matchmaking,
+mesh, relay, dashboard, account, and support infrastructure are in the separate
+[Official Hosted Service Access Policy](docs/HOSTED_SERVICE_ACCESS_POLICY.md). That service
+policy does not add restrictions to the AGPL software license.
 
 The patched Cemu client is a fork of [Cemu](https://github.com/cemu-project/Cemu) and
 remains under its own **MPL-2.0** license; it is distributed separately. Full source for the
@@ -220,8 +227,8 @@ is the **[mh3u-revival branch of the Cemu fork](https://github.com/Matt-Wood-23/
   reproducible build recipe) and the `SETUP-ONLINE.sh` launcher.
 - [cemu-re-mcp](https://github.com/Matt-Wood-23/cemu-re-mcp) — the GDB-stub / pymem
   reverse-engineering bridge used to decode MH3U's online protocol and memory layout.
-- [EasyTier](https://github.com/EasyTier/EasyTier) — the Apache-2.0 P2P mesh embedded
-  for the unified-room networking (binaries redistributed unchanged).
+- [EasyTier v2.6.4](https://github.com/EasyTier/EasyTier/tree/v2.6.4) — the LGPL-3.0
+  P2P mesh used for unified-room networking as a separate executable.
 - [Terracotta](https://github.com/MEKCCK/Terracotta) — the pattern for embedding EasyTier
   (public nodes, RPC-based peer/NAT discovery) that the launcher's mesh module ports.
 - [ghidra-mcp](https://github.com/bethington/ghidra-mcp) (an extended fork of

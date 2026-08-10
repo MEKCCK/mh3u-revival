@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """Secure-server protocol handlers for MH3U.
 
 Strategy for v1: register the protocols MH3U uses and LOG every RMC method the
