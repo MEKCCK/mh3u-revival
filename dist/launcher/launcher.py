@@ -959,7 +959,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             return ip
         nets.append(net)
         app.after(0, lambda: room_stop_btn.configure(state="normal"))
-        vip = net.wait_for_server(25, log=log)
+        # First mesh join is slow: node discovery + STUN + DHCP routinely takes
+        # 30-40s on a fresh machine, and a premature timeout falls back to a
+        # direct connection the player then keeps all session. 45s catches the
+        # normal first join; non-mesh servers cost the player at most 45s once.
+        vip = net.wait_for_server(45, log=log)
         if not vip:
             log("[mesh] this server has no mesh (or it is still forming) — "
                 "connecting directly to %s" % ip)
