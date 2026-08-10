@@ -409,18 +409,15 @@ class CommunityRegistry:
         for i in range(1, NUM_WORLDS + 1):
             gid = 0x100 + i
             # Hall display name. The EUR build (region==4) parses names as a multi-
-            # language ':'-separated packed string (EN:FR:DE:IT:ES); a SINGLE-segment
-            # name makes its parser over-read -> wcslen(null+2) crash (root-caused
-            # 2026-06-26). Sending the name as repeated ':'-segments keeps the EUR
-            # parser in-bounds AND renders cleanly on every region: US/JP (region!=4)
-            # skip the language formatter and take the first segment, so all regions
-            # show "Gathering Hall N" (verified live US+EU 2026-06-27). Unconditional —
-            # there is no downside on any region, so no per-client region detection is
-            # needed. 8 segments (> the 5 languages) gives the parser extra margin.
-            _name = ("Gathering Hall %d" % i)
-            _hallname = ":".join([_name] * 8)
+            # language ':'-separated packed string; the packed form was introduced to
+            # keep EUR in-bounds, but live testing shows the JP build renders the packed
+            # name EMPTY (world list shows no title) — the JP parser takes the first
+            # segment verbatim and the ':'-string confuses it. Send a PLAIN name
+            # so JP/US display correctly; EUR would need the packed form (revisit with
+            # per-client region detection if an EUR player ever appears).
+            _name = "Gathering Hall %d" % i
             self.communities[gid] = _Community(
-                _make_official(gid, _hallname), official=True, offset=2)
+                _make_official(gid, _name), official=True, offset=2)
         # One lobby per world (non-official so it never appears in the world/hall list).
         # gid scheme: world 0x10N -> lobby 0x20N. attribs[0]=self gid = paired chat lobby.
         self.lobbies = {}                    # world_gid -> lobby gid
