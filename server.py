@@ -354,6 +354,8 @@ async def main():
         await natcheck.start(config.HOST)
         _supervise(protocols.notify_trigger_watcher, "notify-watcher")
         _supervise(reaper.reaper_task, "reaper", respawn=True)
+        _supervise(protocols.matchmaking_handlers.password_room_reaper_task,
+                   "password-room-reaper", respawn=True)
         _supervise(hourly_notice_task, "hourly-notice", respawn=True)
         try:
             await aioconsole.ainput("")

@@ -52,7 +52,7 @@ like it treats a Tailscale/Radmin overlay today.
 ## Notes, limits, privacy
 
 - **Everyone on one server is on one mesh, in one set of gathering halls.**
-  That's the "unified room": 16 hunters per hall by default
+  That's the "unified room": 32 hunters per hall by default
   (`MH3U_HALL_MAX`), 4 per hunt room (the game's own P2P limit), and any two
   players can hunt together because the mesh links them.
 - **The mesh identity is derived from the address string.** Host and joiner

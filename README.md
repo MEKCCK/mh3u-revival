@@ -177,7 +177,7 @@ being explored for later — **not promised, and the order isn't fixed**:
   (bare IP) path.
 - **First-class Linux support.** The experimental community bundle graduating to a maintained
   release artifact — ideally CI-built AppImages from the Cemu fork instead of hand-built ones.
-- **Larger lobbies / community hubs.** *In beta testing now* — the gathering hall holds 16
+- **Larger lobbies / community hubs.** *In beta testing now* — the gathering hall holds 32
   by default (`MH3U_HALL_MAX`) with multiple 4-player rooms per server, on the back of the
   hardened multi-room churn + public-IP hosting. Still to prove: a real hall with many live
   hunters (roster UI / hall behavior beyond 4), and a shared "hub" server a group points an LFG at.

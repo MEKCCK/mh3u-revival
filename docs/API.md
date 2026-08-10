@@ -40,9 +40,12 @@ unified-room mesh is on), uptime, and abuse/DoS caps:
   "advertise_override": null,
   "uptime_s": 1234.5,
   "caps": {"connections": 128, "per_ip": 16, "rooms": 48, "room_participants": 32},
-  "halls": {"hall_max": 16, "room_max": 4, "num_worlds": 1}
+  "halls": {"hall_max": 32, "room_max": 4, "num_worlds": 1}
 }
 ```
+
+When password-room enforcement is enabled, the status response also includes
+`password_room_policy` with `enabled`, `destroyed`, and `scan_seconds` fields.
 
 ### `GET /api/players`
 Live secure connections — the core "who is online" view:

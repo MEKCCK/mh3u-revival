@@ -205,7 +205,7 @@ explicitly **out of scope** (it's what projects like Pretendo do). Instead:
 
 **Beta scope (deliberate):**
 - **4 players per hunt room** → the game's own P2P limit, not raisable server-side
-  (`MH3U_ROOM_MAX`, leave at 4). **Gathering halls hold more** — default 16
+  (`MH3U_ROOM_MAX`, leave at 4). **Gathering halls hold more** — default 32
   (`MH3U_HALL_MAX`), server-tunable, since the hall is server-roster-fed and P2P is
   room-scoped. Multiple 4-player rooms per server are supported (the rejoin/reaper +
   multi-room churn hardening above); larger live halls are the current beta test.

@@ -1,7 +1,7 @@
 # Hosting a MH3U Revival game
 
 You run the server; your friends point their patched Cemu at you. The server does auth +
-matchmaking + presence — the hunt itself is peer-to-peer. **Beta: up to 16 hunters per
+matchmaking + presence — the hunt itself is peer-to-peer. **Beta: up to 32 hunters per
 gathering hall, 4 per hunt room** (the 4-per-room is the game's own P2P limit; the hall size
 is server-tunable — see `MH3U_HALL_MAX` in the env-var table).
 
@@ -193,8 +193,13 @@ same hall and enter your room.
 |---|---|---|
 | `MH3U_ADVERTISE` | (none) | reachable IP handed to joiners; substitutes loopback for co-located peers |
 | `MH3U_BIND` | `0.0.0.0` | bind address (set `127.0.0.1` to restrict to local) |
-| `MH3U_HALL_MAX` | `16` | hunters who can share a **gathering hall / lobby** at once (each then forms their own hunt room). The hall is server-roster-fed, so this is safe to raise; the game renders large halls fine. Bump for a bigger community hub. |
+| `MH3U_HALL_MAX` | `32` | hunters who can share a **gathering hall / lobby** at once (each then forms their own hunt room). The hall is server-roster-fed, so this is safe to raise; the game renders large halls fine. |
 | `MH3U_ROOM_MAX` | `4` | hunters per **hunt room**. This is the game's own P2P limit — **leave it at 4**; the client isn't built for more in one hunt. Exposed only for completeness. |
+| `MH3U_DESTROY_PASSWORD_ROOMS` | `1` | automatically remove hunt rooms carrying an explicit password, password-enabled flag, codeword, or configured locked policy. Set `0` to disable. |
+| `MH3U_PASSWORD_ROOM_SCAN_SECONDS` | `5` | interval for the background password-room scan. Creation and room updates are also checked immediately. |
+| `MH3U_PASSWORD_ATTR_INDEX` | `5` | zero-based MH3U room attribute carrying the password-room marker. The observed retail client sends `attribs[5]=1` for a password room and `0` for a public room. |
+| `MH3U_PASSWORD_POLICY_VALUES` | `2` | comma-separated participation-policy values treated as password-protected when their policy argument is non-zero. |
+| `MH3U_PASSWORD_FLAG_MASK` | `0` | optional numeric/hex mask for a title-specific locked-room bit after it has been identified from a live trace. |
 | `MH3U_NUM_WORLDS` | `1` | number of gathering **worlds** advertised on the world-select screen. Rooms are global (not tied to a world), so one world is honest for a small server; raise to seed more world entries. |
 | `MH3U_NOTIFY_ON` | `1` | on room leave/disconnect, notify the remaining players so their game drops the leaver (the rejoin fix — works for any host, local or remote). Leave on. |
 | `MH3U_HOST_FREE` | `0` | legacy fallback for the same fix: poke the departed guest's slot directly in the **host Cemu's** RAM. Only works when the server runs **on the same machine as the host Cemu**; superseded by `MH3U_NOTIFY_ON`. |
