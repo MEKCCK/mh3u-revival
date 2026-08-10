@@ -133,8 +133,11 @@ def snapshot_players(full=True):
         conn_at = getattr(client, "_mh3u_connected_at", None)
         rooms = [gid for gid, s in m.REGISTRY.sessions.items()
                  if pid in s.participants]
+        # A player in a port joins BOTH the world community AND its paired
+        # lobby — the lobby is game plumbing, never surface it to the panel.
+        lobby_gids = set(getattr(m.COMMUNITY, "lobbies", {}).values())
         halls = [gid for gid, c in m.COMMUNITY.communities.items()
-                 if pid in c.participants]
+                 if pid in c.participants and gid not in lobby_gids]
         entry = {
             "pid": pid,
             "name": m.NAMES.get(pid),

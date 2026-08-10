@@ -116,7 +116,7 @@ function fmtBytes(b){
 // Raw GIDs are never shown to players — every hex id is mapped to a
 // human-readable label ("0x1006" -> "房间 6", "0x101" -> "港口 1").
 let PORT_LABEL = {};   // hex gid -> port label (built from /api/halls)
-function portLabel(g){ return PORT_LABEL[g] || g; }
+function portLabel(g){ return PORT_LABEL[g] || "-"; }   // never raw hex
 function roomLabel(g){
   const n = parseInt(String(g).replace("0x",""), 16) & 0xFFF;
   return isNaN(n) ? g : t("roomShort") + " " + n;
