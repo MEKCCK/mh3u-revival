@@ -35,9 +35,16 @@ WEBUI_HTML = """<!DOCTYPE html>
   th { color:var(--dim); font-weight:500; }
   .empty { color:var(--dim); padding:8px 4px; }
   #log { font-family:Consolas,monospace; font-size:11.5px; color:#9fb3c8; max-height:280px;
-         overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+  #       overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+  .evlog { font-family:Consolas,monospace; font-size:11.5px; color:#9fb3c8; max-height:200px;
+           overflow-y:auto; white-space:pre-wrap; }
+  .ev .t { color:var(--dim); margin-right:6px; }
+  .ev .join { color:var(--ok); } .ev .left { color:var(--bad); }
+  .ev .room { color:var(--acc); } .ev .port { color:var(--warn); }
   .badge { display:inline-block; padding:0 6px; border-radius:10px; font-size:11px; background:#1f2a36; margin-left:4px; }
   .badge.host { background:#2d1f14; color:var(--warn); }
+  .badge.full { background:#3a1d1d; color:var(--bad); }
+  .attrib { color:var(--dim); font-size:11px; }
 </style>
 </head>
 <body>
@@ -61,8 +68,8 @@ WEBUI_HTML = """<!DOCTYPE html>
   </section>
   <section>
     <h2>狩猎房间</h2>
-    <table><thead><tr><th>GID</th><th>房主</th><th>人数</th><th>模式</th><th>参与者</th></tr></thead>
-    <tbody id="t_rooms"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody></table>
+    <table><thead><tr><th>GID</th><th>房主</th><th>人数</th><th>模式</th><th>属性</th><th>参与者</th></tr></thead>
+    <tbody id="t_rooms"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody></table>
   </section>
 </div>
 
@@ -78,6 +85,8 @@ WEBUI_HTML = """<!DOCTYPE html>
     <tbody id="t_srv"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody></table>
   </section>
 </div>
+
+<section><h2>活动记录</h2><div id="events" class="evlog"></div></section>
 
 <script>
 "use strict";
@@ -120,40 +129,50 @@ function renderStatus(){
 
 async function renderPlayers(){
   const d = await getJ(apiPath("/api/players"));
-  $("c_players").textContent = d.count;
-  const tb = $("t_players");
-  if (!d.count){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无玩家</td></tr>'; return; }
-  tb.innerHTML = d.players.map(p =>
-    "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + fmtSec(p.uptime_s)
-    + '</td><td>' + fmtSec(p.idle_s)
-    + '</td><td>' + (p.rooms||[]).join(" ") + '</td><td>' + (p.halls||[]).join(" ") + "</td></tr>"
-  ).join("");
+  const html = !d.count
+    ? '<tr><td colspan="6" class="empty">暂无玩家</td></tr>'
+    : d.players.map(p =>
+        "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + fmtSec(p.uptime_s)
+        + '</td><td>' + fmtSec(p.idle_s)
+        + '</td><td>' + (p.rooms||[]).join(" ") + '</td><td>' + (p.halls||[]).join(" ") + "</td></tr>"
+      ).join("");
+  if ($("t_players").innerHTML !== html) $("t_players").innerHTML = html;
+  const n = d.count || 0;
+  if ($("c_players").textContent !== String(n)) $("c_players").textContent = n;
+  document.title = (n ? "[" + n + "在线] " : "") + "MH3U Revival 面板";
 }
 
 async function renderRooms(){
   const d = await getJ(apiPath("/api/rooms"));
-  $("c_rooms").textContent = d.count;
-  const tb = $("t_rooms");
-  if (!d.count){ tb.innerHTML = '<tr><td colspan="5" class="empty">暂无房间</td></tr>'; return; }
-  tb.innerHTML = d.rooms.map(r =>
-    "<tr><td>" + esc(r.gid) + '</td><td>' + esc(r.host_name || r.host_pid)
-    + '</td><td>' + r.num_participants + "/" + r.max_participants
-    + '</td><td>' + esc(r.game_mode) + '</td><td>'
-    + (r.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
-  ).join("");
+  const html = !d.count
+    ? '<tr><td colspan="6" class="empty">暂无房间</td></tr>'
+    : d.rooms.map(r => {
+        const full = r.num_participants >= r.max_participants;
+        return "<tr><td>" + esc(r.gid) + '</td><td>' + esc(r.host_name || r.host_pid)
+          + (r.host_name ? ' <span class="badge host">房主</span>' : "")
+          + '</td><td><span class="badge' + (full ? " full" : "") + '">'
+          + r.num_participants + "/" + r.max_participants + "</span></td><td>"
+          + esc(r.game_mode) + '</td><td class="attrib">'
+          + (r.attribs||[]).slice(0,4).join(",") + '</td><td>'
+          + (r.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>";
+      }).join("");
+  if ($("t_rooms").innerHTML !== html) $("t_rooms").innerHTML = html;
+  const n = d.count || 0;
+  if ($("c_rooms").textContent !== String(n)) $("c_rooms").textContent = n;
 }
 
 async function renderHalls(){
   const d = await getJ(apiPath("/api/halls"));
-  const tb = $("t_halls");
   const ports = d.halls.filter(h => !h.is_lobby);   // lobbies are game plumbing, hide them
-  if (!ports.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无港口</td></tr>'; return; }
-  tb.innerHTML = ports.map(h =>
-    "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
-    + '</td><td>' + h.num_participants + '</td><td>' + h.max_participants
-    + '</td><td>' + (h.official ? "官方" : "自建")
-    + '</td><td>' + (h.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
-  ).join("");
+  const html = !ports.length
+    ? '<tr><td colspan="6" class="empty">暂无港口</td></tr>'
+    : ports.map(h =>
+        "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
+        + '</td><td>' + h.num_participants + '</td><td>' + h.max_participants
+        + '</td><td>' + (h.official ? "官方" : "自建")
+        + '</td><td>' + (h.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
+      ).join("");
+  if ($("t_halls").innerHTML !== html) $("t_halls").innerHTML = html;
 }
 
 async function renderSrv(){
@@ -177,19 +196,45 @@ async function renderSrv(){
   tb.innerHTML = rows.map(r => "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>").join("");
 }
 
-async function tick(){
+let evSeq = 0;
+async function renderEvents(){
   try {
-    statusData = await getJ(apiPath("/api/status"));
-    $("dot").classList.add("ok");
-  } catch(e){
-    $("dot").classList.remove("ok");
-    $("sub").textContent = "API 不可达: " + e.message;
-  }
+    const d = await getJ(apiPath("/api/events?since=" + evSeq));
+    evSeq = d.seq || evSeq;
+    if (!(d.events||[]).length) return;
+    const el = $("events");
+    const names = {player_joined:"加入服务器", player_left:"离开服务器",
+                   room_created:"创建房间", room_destroyed:"房间解散",
+                   room_joined:"进入房间", room_left:"离开房间",
+                   port_joined:"进入港口", port_left:"离开港口"};
+    const cls = {player_joined:"join", player_left:"left", port_joined:"port",
+                 port_left:"port", room_created:"room", room_destroyed:"room",
+                 room_joined:"room", room_left:"room"};
+    const frag = d.events.map(e => {
+      const who = esc(e.name || e.pid);
+      const what = names[e.type] || e.type;
+      const where = e.gid ? " " + esc(e.gid) : "";
+      return '<div class="ev"><span class="t">' + new Date().toTimeString().slice(0,8)
+        + '</span><span class="' + (cls[e.type]||"") + '">' + what + '</span> '
+        + who + where + "</div>";
+    }).join("");
+    el.insertAdjacentHTML("afterbegin", frag);
+    while (el.children.length > 60) el.lastChild.remove();
+  } catch(e){ /* feed is best-effort */ }
+}
+
+async function tick(){
+  const jobs = [
+    getJ(apiPath("/api/status")).then(d => { statusData = d; $("dot").classList.add("ok"); })
+      .catch(e => { $("dot").classList.remove("ok"); $("sub").textContent = "API 不可达: " + e.message; }),
+    renderPlayers().catch(() => {}),
+    renderRooms().catch(() => {}),
+    renderHalls().catch(() => {}),
+    renderEvents().catch(() => {}),
+  ];
+  await Promise.all(jobs);
   renderStatus();
   renderSrv();
-  try { await renderPlayers(); } catch(e){ $("t_players").innerHTML = '<tr><td colspan="6" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
-  try { await renderRooms(); } catch(e){ $("t_rooms").innerHTML = '<tr><td colspan="5" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
-  try { await renderHalls(); } catch(e){ $("t_halls").innerHTML = '<tr><td colspan="6" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
 }
 tick(); setInterval(tick, 3000);
 </script>

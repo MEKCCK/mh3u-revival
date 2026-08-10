@@ -40,6 +40,8 @@ import json
 import time
 import asyncio
 import logging
+import threading
+import collections
 
 import config
 import limits
@@ -234,12 +236,83 @@ def snapshot_stats(full=True):
 # Minimal HTTP/1.1 plumbing (GET/OPTIONS, JSON, CORS-open)
 # ---------------------------------------------------------------------------
 
+# Activity event feed — /api/events (privacy-safe: pid/name/gid only)
+# ---------------------------------------------------------------------------
+
+_event_log = collections.deque(maxlen=50)   # (seq, type, pid, name, gid)
+_event_seq = 0
+_event_lock = threading.Lock()
+
+
+def _push_event(etype, pid, name, gid):
+    global _event_seq
+    with _event_lock:
+        _event_seq += 1
+        _event_log.append((_event_seq, etype, pid, name, gid))
+
+
+def snapshot_events(since):
+    try:
+        s = int(since or 0)
+    except (TypeError, ValueError):
+        s = 0
+    with _event_lock:
+        items = [e for e in _event_log if e[0] > s]
+        seq = _event_seq
+    return {
+        "seq": seq,
+        "events": [{"seq": e[0], "type": e[1], "pid": e[2],
+                    "name": e[3], "gid": e[4]} for e in items],
+    }
+
+
+async def _event_watcher():
+    """Background task: diff live state every 2s and push join/leave/create
+    events. Pure membership data — never IPs or log lines."""
+    prev_players, prev_rooms, prev_ports = set(), {}, {}
+    while True:
+        await asyncio.sleep(2)
+        try:
+            m = _mh()
+            if m is None:
+                continue
+            now_players = set(m.CLIENTS)
+            now_rooms = {gid: set(s.participants)
+                         for gid, s in m.REGISTRY.sessions.items()}
+            now_ports = {gid: set(c.participants)
+                         for gid, c in m.COMMUNITY.communities.items()
+                         if gid not in getattr(m.COMMUNITY, "lobbies", {}).values()}
+
+            for pid in sorted(now_players - prev_players):
+                _push_event("player_joined", pid, m.NAMES.get(pid), None)
+            for pid in sorted(prev_players - now_players):
+                _push_event("player_left", pid, None, None)
+            for gid in sorted(now_rooms.keys() - prev_rooms.keys()):
+                s = m.REGISTRY.sessions[gid]
+                _push_event("room_created", s.host_pid, m.NAMES.get(s.host_pid), hex(gid))
+            for gid in sorted(prev_rooms.keys() - now_rooms.keys()):
+                _push_event("room_destroyed", None, None, hex(gid))
+            for gid, parts in now_rooms.items():
+                for pid in sorted(parts - prev_rooms.get(gid, set())):
+                    _push_event("room_joined", pid, m.NAMES.get(pid), hex(gid))
+                for pid in sorted(prev_rooms.get(gid, set()) - parts):
+                    _push_event("room_left", pid, m.NAMES.get(pid), hex(gid))
+            for gid, parts in now_ports.items():
+                for pid in sorted(parts - prev_ports.get(gid, set())):
+                    _push_event("port_joined", pid, m.NAMES.get(pid), hex(gid))
+                for pid in sorted(prev_ports.get(gid, set()) - parts):
+                    _push_event("port_left", pid, m.NAMES.get(pid), hex(gid))
+
+            prev_players, prev_rooms, prev_ports = now_players, now_rooms, now_ports
+        except Exception:
+            pass
 _ROUTES = {
     "/api/status": ("status", snapshot_status),
     "/api/players": ("players", snapshot_players),
     "/api/rooms": ("rooms", snapshot_rooms),
     "/api/halls": ("halls", snapshot_halls),
     "/api/stats": ("stats", snapshot_stats),
+    "/api/events": ("events", snapshot_events),
 }
 
 # The built-in webui panel (self-contained HTML, zero external deps).
@@ -352,8 +425,8 @@ async def _handle(reader, writer):
                 params[k] = v
         full = _is_full_access(params, head, writer)
         try:
-            if _name == "log":
-                payload = fn(params.get("tail", "200"), full=full)
+            if _name == "events":
+                payload = fn(params.get("since", "0"))
             else:
                 payload = fn(full=full)
             _json_response(writer, 200, payload)
@@ -395,12 +468,15 @@ class API:
     async def __aenter__(self):
         self._server = await asyncio.start_server(
             _client_connected, self.host, self.port)
+        self._watcher = asyncio.get_running_loop().create_task(_event_watcher())
         logger.info("api: dashboard JSON API on http://%s:%d/api/ (bind %s:%d)",
                     "127.0.0.1" if self.host in ("0.0.0.0", "") else self.host,
                     self.port, self.host, self.port)
         return self
 
     async def __aexit__(self, *exc):
+        if getattr(self, "_watcher", None) is not None:
+            self._watcher.cancel()
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
@@ -410,3 +486,6 @@ class API:
 def serve(host=API_BIND, port=API_PORT):
     """Convenience async context manager with env-driven defaults."""
     return API(host, port)
+
+
+# ---------------------------------------------------------------------------

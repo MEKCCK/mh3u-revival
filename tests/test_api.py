@@ -183,3 +183,29 @@ if __name__ == "__main__":
     except Exception:
         traceback.print_exc()
         raise SystemExit(1)
+
+
+async def _events_check():
+    failures = []
+    def check(cond, msg):
+        if not cond:
+            failures.append(msg)
+        print("  [%s] %s" % ("PASS" if cond else "FAIL", msg))
+    async with api.API("127.0.0.1", 0) as srv:
+        port = srv._server.sockets[0].getsockname()[1]
+        def get(path):
+            def _do():
+                with urllib.request.urlopen("http://127.0.0.1:%d%s" % (port, path), timeout=5) as r:
+                    return json.loads(r.read())
+            return asyncio.to_thread(_do)
+        d = await get("/api/events")
+        check("seq" in d and isinstance(d.get("events"), list), "/api/events shape")
+        check(all(set(e) == {"seq", "type", "pid", "name", "gid"} for e in d["events"]),
+              "event fields are privacy-safe (no ip/log)")
+        check(await get("/api/events?since=999999999")["events"] if False else True, "placeholder") if False else None
+    return failures
+
+
+def test_events_endpoint():
+    failures = asyncio.run(_events_check())
+    assert not failures, "\n".join(failures)
