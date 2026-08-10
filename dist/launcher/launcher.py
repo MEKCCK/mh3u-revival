@@ -873,6 +873,22 @@ def _selftest():
         shutil.rmtree(tmp, ignore_errors=True)
 
     print("== GUI control flow ==")
+    class FakeLogWidget:
+        def __init__(self):
+            self.states = []
+            self.lines = []
+
+        def configure(self, **kwargs):
+            self.states.append(kwargs.get("state"))
+
+        def insert(self, where, text):
+            self.lines.append((where, text))
+
+    fake_log = FakeLogWidget()
+    _display_existing_log_line(fake_log, clientlog.HOURLY_NOTICE)
+    check(fake_log.lines == [("end", clientlog.HOURLY_NOTICE + "\n")]
+          and fake_log.states == ["normal", "disabled"],
+          "startup notice is shown once in GUI log panes")
     check("mainloop" in _run_gui.__code__.co_names,
           "_run_gui reaches Tk.mainloop (guards against accidental early dedent)")
 
@@ -893,6 +909,15 @@ def _touch_elevated_flag(root):
             f.write("1")
     except OSError:
         pass
+
+
+def _display_existing_log_line(widget, line):
+    """Display an already-persisted line without writing it to the log again."""
+    if not line:
+        return
+    widget.configure(state="normal")
+    widget.insert("end", line + "\n")
+    widget.configure(state="disabled")
 
 
 def _clear_elevated_flag(root):
@@ -986,10 +1011,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     join_log = scrolledtext.ScrolledText(join, height=12, wrap="word", state="disabled")
     join_log.pack(fill="both", expand=True)
     startup_notice = clog.latest_notice_line()
-    if startup_notice:
-        join_log.configure(state="normal")
-        join_log.insert("end", startup_notice + "\n")
-        join_log.configure(state="disabled")
+    _display_existing_log_line(join_log, startup_notice)
 
     # ---- unified auto-mesh (no codes — the server address IS the key) ----
     meshrow = ttk.Frame(join)
@@ -1234,10 +1256,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         host_log = scrolledtext.ScrolledText(host, height=12, wrap="word", state="disabled")
         host_log.pack(fill="both", expand=True, pady=(8, 0))
-        if startup_notice:
-            host_log.configure(state="normal")
-            host_log.insert("end", startup_notice + "\n")
-            host_log.configure(state="disabled")
+        _display_existing_log_line(host_log, startup_notice)
 
         proc_holder = {"proc": None, "reader": None}
 
