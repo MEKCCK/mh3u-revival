@@ -57,7 +57,7 @@ WEBUI_HTML = """<!DOCTYPE html>
   <div class="card"><div class="k">房间上限（全服）</div><div class="v" id="c_rooms_cap">-</div></div>
   <div class="card"><div class="k">在线上限（全服）</div><div class="v" id="c_conns_cap">-</div></div>
   <div class="card"><div class="k">运行时长</div><div class="v" id="c_uptime">-</div></div>
-  <div class="card"><div class="k">大厅容量（每厅）</div><div class="v" id="c_caps">-</div></div>
+  <div class="card"><div class="k">港口容量</div><div class="v" id="c_caps">-</div></div>
 </div>
 
 <div class="grid">
@@ -75,7 +75,7 @@ WEBUI_HTML = """<!DOCTYPE html>
 
 <div class="grid">
   <section>
-    <h2>大厅 / 集会所（港口）</h2>
+    <h2>港口</h2>
     <table><thead><tr><th>GID</th><th>名称</th><th>人数</th><th>上限</th><th>类型</th><th>成员</th></tr></thead>
     <tbody id="t_halls"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody></table>
   </section>
@@ -169,7 +169,7 @@ async function renderHalls(){
     : ports.map(h =>
         "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
         + '</td><td>' + h.num_participants + '</td><td>' + (h.displayed_max != null ? h.displayed_max : h.max_participants)
-        + '</td><td>' + (h.official ? "官方" : "自建")
+        + '</td><td>港口'
         + '</td><td>' + (h.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
       ).join("");
   if ($("t_halls").innerHTML !== html) $("t_halls").innerHTML = html;
@@ -188,7 +188,7 @@ async function renderSrv(){
     ["公布地址（玩家填写）", s.public_address || s.advertised_address || "-"],
     ["票证发布地址（mesh）", s.advertised_address || "-"],
     ["港口数量", s.halls ? (s.halls.num_worlds != null ? s.halls.num_worlds : "-") : "-"],
-    ["大厅容量", s.halls ? (s.halls.hall_max != null ? s.halls.hall_max + " 人/港" : "-") : "-"],
+    ["港口容量", s.halls ? (s.halls.hall_max != null ? s.halls.hall_max + " 人" : "-") : "-"],
     ["启动时间", s.started_at || "-"],
     ["密码房策略", s.password_room_policy
                   ? (s.password_room_policy.enabled ? "启用（已销毁 " + (s.password_room_policy.destroyed||0) + " 个）" : "关闭")
