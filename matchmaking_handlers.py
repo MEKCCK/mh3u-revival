@@ -408,13 +408,11 @@ class CommunityRegistry:
         self._runtime_gids = set()
         for i in range(1, NUM_WORLDS + 1):
             gid = 0x100 + i
-            # Hall display name. The EUR build (region==4) parses names as a multi-
-            # language ':'-separated packed string; the packed form was introduced to
-            # keep EUR in-bounds, but live testing shows the JP build renders the packed
-            # name EMPTY (world list shows no title) — the JP parser takes the first
-            # segment verbatim and the ':'-string confuses it. Send a PLAIN name
-            # so JP/US display correctly; EUR would need the packed form (revisit with
-            # per-client region detection if an EUR player ever appears).
+            # Hall display name. The packed ':'-separated form (added for a suspected
+            # EUR over-read) made the JP build render world names EMPTY — live JP
+            # testing proved the JP parser chokes on it. PLAIN names are sent instead;
+            # an EUR user confirmed live (2026-08-11) that plain names render fine on
+            # EUR too, so no per-region form is needed.
             _name = "Gathering Hall %d" % i
             self.communities[gid] = _Community(
                 _make_official(gid, _name), official=True, offset=2)
