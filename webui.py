@@ -243,7 +243,7 @@ async function getJ(path){
 }
 // Encapsulated data layer — components only ever call Api.*, never fetch.
 const Api = {
-  status:  () => Api.status(),
+  status:  () => getJ(apiPath("/api/status")),
   players: () => getJ(apiPath("/api/players")),
   rooms:   () => getJ(apiPath("/api/rooms")),
   halls:   () => getJ(apiPath("/api/halls")),
