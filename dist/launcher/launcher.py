@@ -944,8 +944,14 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
         name, secret = easytier.mesh_identity(ip)
         log("[mesh] joining %s's unified mesh ..." % ip)
         net = easytier.EasyTierNet(ROOT_DIR, log=log)
-        ok, msg = net.start(name, secret,
-                            easytier.JOINER_HOSTNAME_PREFIX + secrets.token_hex(3))
+        # The server's mesh node is the network anchor: connect to it DIRECTLY
+        # (its LAN listener, reachable whenever the server address is) in
+        # addition to the public nodes. Without this a client whose network
+        # can't reach the public nodes (common!) never joins the mesh at all.
+        ok, msg = net.start(
+            name, secret,
+            easytier.JOINER_HOSTNAME_PREFIX + secrets.token_hex(3),
+            extra_peers=["tcp://%s:%d" % (ip, easytier.LAN_TCP_PORT)])
         if not ok:
             log("[mesh] %s — connecting directly to %s" % (msg, ip))
             return ip
