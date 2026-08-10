@@ -568,6 +568,13 @@ class EasyTierNet:
         # address (same flag Terracotta passes; without it no IP is assigned
         # at all). The server node pins its own instead.
         args += ["-d"]
+        # Default console level: warn. easytier's MagicDNS module (no disable
+        # flag in this version) prints every proxied DNS response — SOA/NS
+        # records from the machine's own resolver — at INFO/DEBUG, flooding
+        # the launcher log and the client.log file. warn keeps errors visible
+        # and silences the spam; set MH3U_EASYTIER_LOG_LEVEL=info/debug for
+        # mesh troubleshooting.
+        args += ["--console-log-level", os.environ.get("MH3U_EASYTIER_LOG_LEVEL", "warn")]
         for node in PUBLIC_NODES:
             node = node.strip()
             if node:
