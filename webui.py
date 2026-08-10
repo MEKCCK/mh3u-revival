@@ -185,7 +185,8 @@ async function renderSrv(){
     ["NEX 版本", s.nex_version != null ? "v" + s.nex_version : "-"],
     ["监听端口", "auth=" + ((s.ports||{}).auth) + " · secure=" + ((s.ports||{}).secure)
                  + " · natcheck=" + ((s.ports||{}).natcheck)],
-    ["公布地址", s.advertised_address || "-"],
+    ["公布地址（玩家填写）", s.public_address || s.advertised_address || "-"],
+    ["票证发布地址（mesh）", s.advertised_address || "-"],
     ["港口数量", s.halls ? (s.halls.num_worlds != null ? s.halls.num_worlds : "-") : "-"],
     ["大厅容量", s.halls ? (s.halls.hall_max != null ? s.halls.hall_max + " 人/港" : "-") : "-"],
     ["启动时间", s.started_at || "-"],

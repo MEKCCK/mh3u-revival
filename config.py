@@ -48,6 +48,12 @@ SECURE_PORT = 1224               # NEX secure server (matchmaking lives here)
 # their observed (NAT-external) address. Leave empty to always use the observed address.
 ADVERTISE_ADDRESS = os.environ.get("MH3U_ADVERTISE", "").strip()
 
+# The address the host TOLD players to use (what they type in the launcher).
+# When the launcher runs the server with the mesh, MH3U_ADVERTISE is the mesh
+# virtual IP (tickets point at it) — the PUBLIC address the host shared is a
+# different thing and is passed separately for the dashboard panel.
+PUBLIC_ADDRESS = os.environ.get("MH3U_PUBLIC_ADDRESS", "").strip()
+
 # Unified-mesh room policy. The launcher enables this when it starts a server
 # with EasyTier. Login and hall browsing remain available from any address, but
 # room creation/join are restricted to the mesh so the server never publishes

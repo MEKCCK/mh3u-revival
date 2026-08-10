@@ -1355,9 +1355,12 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             threading.Thread(target=poll_peers_loop, daemon=True).start()
             return True, vip, vip
 
-        def _spawn_server(advertise, mesh_ip, cmd, kind):
+        def _spawn_server(advertise, mesh_ip, cmd, kind, public_ip=None):
             env = dict(os.environ)
             env["MH3U_ADVERTISE"] = advertise
+            if public_ip:
+                # the address the host told players (dashboard /api/status)
+                env["MH3U_PUBLIC_ADDRESS"] = public_ip
             banner_var.set("Friends connect to:  %s" % advertise
                            + (f"   —   unified mesh: {mesh_ip}" if mesh_ip else ""))
             if not banner.winfo_ismapped():
@@ -1419,7 +1422,8 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                     app.after(0, lambda: (start_btn.configure(state="normal"),
                                           hostplay_btn.configure(state="normal")))
                     return
-                app.after(0, lambda: _spawn_server(advertise, mesh_ip, cmd, kind))
+                app.after(0, lambda: _spawn_server(advertise, mesh_ip, cmd, kind,
+                                                   public_ip=ip))
                 if also_play:
                     final = mesh_ip or ip
                     run_join_flow(ROOT_DIR, final, launch=True,

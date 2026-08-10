@@ -93,6 +93,8 @@ def snapshot_status(full=True):
         },
         "advertised_address": config.SERVER_ADDRESS,
         "advertise_override": config.ADVERTISE_ADDRESS or None,
+        # what players actually type into the launcher (host-shared address)
+        "public_address": config.PUBLIC_ADDRESS or None,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(_STARTED_AT)),
         "uptime_s": round(time.time() - _STARTED_AT, 1),
         "caps": {
