@@ -23,3 +23,7 @@ guestram.manifest.json
 dist/launcher/build/
 dist/launcher/dist/
 dist/launcher/*.spec
+
+# Local packaging output from the pure-Python netifaces stub
+vendor/netifaces_stub/build/
+vendor/netifaces_stub/*.egg-info/

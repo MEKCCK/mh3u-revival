@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 # Unified room mesh — one server, one private network, no VPN to install
 
 The server runs a single EasyTier mesh, and **every client that connects to the
@@ -7,7 +9,9 @@ two players. No VPN app to install, no room codes, no invite flow: **the server
 address IS the key**.
 
 Built on [EasyTier](https://github.com/EasyTier/EasyTier) (the P2P mesh engine
-[Terracotta](https://github.com/MEKCCK/Terracotta) embeds).
+[Terracotta](https://github.com/MEKCCK/Terracotta) embeds). The pinned EasyTier
+`v2.6.4` runtime is licensed under LGPL-3.0; see
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## How it works
 
@@ -17,7 +21,7 @@ Built on [EasyTier](https://github.com/EasyTier/EasyTier) (the P2P mesh engine
 | Client node | Started automatically on **Save + Play** (Join tab). Derives the **same** identity from the address the host gave you, joins the mesh, finds the `mh3u-server` peer, and points Cemu at its virtual IP. |
 | Mesh secret | A baked public constant, BY DESIGN: the mesh is the transport plane (like a tailnet), not a security boundary — the room is invitation-only by address, and game auth is open too. |
 | Public nodes | `tcp://public.easytier.top:11010` + `tcp://public2.easytier.cn:54321` handle discovery; they **relay only** when a pair can't hole-punch (symmetric NAT / CGNAT) — the mesh's built-in relay fallback. |
-| Fallback | If the host's server has no mesh (runtime missing / failed / `127.0.0.1`), joiners connect directly to the advertised address, exactly like the classic flow. |
+| Failure policy | Mesh mode fails closed: a missing runtime, declined elevation, failed core, or missing server route stops play instead of silently publishing public P2P addresses. Operators can explicitly set `MH3U_ALLOW_DIRECT=1` only for a legacy direct server. |
 
 Once Cemu connects over the mesh, the server's existing mechanisms just work:
 tickets point at the virtual IP, natcheck reports the virtual IPs it observes,
@@ -66,9 +70,10 @@ like it treats a Tailscale/Radmin overlay today.
 - **Updating EasyTier:** pinned version/URLs are `MH3U_EASYTIER_VERSION` /
   `MH3U_EASYTIER_URL` (env) in `dist/launcher/easytier.py`. Pre-download:
   `python dist/launcher/fetch_easytier.py`.
-- **Licensing:** EasyTier is Apache-2.0; its binaries are redistributed
-  unchanged. Optional — classic Tailscale / Radmin / LAN / public-IP play
-  works exactly as before.
+- **Licensing:** EasyTier `v2.6.4` is LGPL-3.0 and runs as a separate
+  executable. Preserve its upstream license file when redistributing a runtime
+  bundle. Legacy Tailscale / Radmin / LAN / public-IP operation requires the
+  explicit `MH3U_ALLOW_DIRECT=1` override.
 
 ## Troubleshooting
 

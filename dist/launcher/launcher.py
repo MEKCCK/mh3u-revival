@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """MH3U Revival — unified Windows launcher.
 
 A single-window app that replaces the two setup .bats (`PLAY MH3U ONLINE.bat`
@@ -26,6 +29,7 @@ import re
 import sys
 import json
 import time
+import ipaddress
 import secrets
 import zipfile
 import tempfile
@@ -66,7 +70,11 @@ EASYTIER_DIR_REL = "easytier"
 GAMEDIR_REL = os.path.join("portable", "mlc01", "usr", "title", "00050000", "10118300")
 ACTDIR_REL = os.path.join("portable", "mlc01", "usr", "save", "system", "act", "80000001")
 SRVFILE_REL = os.path.join("portable", "mh3u_server.txt")
+MESH_SEED_REL = os.path.join("portable", "mh3u_mesh_seed.txt")
 PLACEHOLDER = "PASTE_HOST_IP_HERE"
+ALLOW_DIRECT = os.environ.get("MH3U_ALLOW_DIRECT", "0").strip().lower() in (
+    "1", "true", "yes", "on"
+)
 
 # stock default Mii — cosmetic only, identical to the .bat's MIID / MIIN
 DEFAULT_MII = ("010001100000d73e030034330100010001000100010001000100640065006600610075"
@@ -80,7 +88,8 @@ ACCT_VALID_MARKER = "IsPasswordCacheEnabled=1"
 # Paths (relative to bundle root) the updater must NEVER overwrite — user state.
 # NB: `version.txt` is intentionally NOT here; it is rewritten LAST after success.
 PROTECTED_PREFIXES = (
-    SRVFILE_REL,                                                      # host IP the user typed
+    SRVFILE_REL,                                                      # current Cemu target
+    MESH_SEED_REL,                                                    # public server address the user typed
     EASYTIER_DIR_REL,                                                 # downloaded EasyTier runtime
     os.path.join("portable", "mlc01", "usr", "save"),                # account.dat + game saves
     os.path.join("portable", "mlc01", "usr", "title"),               # the user's game dump
@@ -213,6 +222,46 @@ def write_host_ip(srvfile_path, ip):
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w", newline="\n", encoding="utf-8") as f:
         f.write(f"{ip.strip()}\n")
+
+
+def is_mesh_virtual_address(value):
+    """True for an address assigned inside the launcher's EasyTier subnet.
+
+    These addresses are valid Cemu targets only after the overlay is up. They
+    must never seed mesh_identity(), otherwise the next launch derives a
+    different network and can no longer discover the real server node.
+    """
+    try:
+        return ipaddress.ip_address(str(value or "").strip()) in ipaddress.ip_network(
+            "10.126.126.0/24"
+        )
+    except ValueError:
+        return False
+
+
+def read_join_seed(seedfile_path, srvfile_path):
+    """Read the stable public/server address used to join the EasyTier mesh.
+
+    Older bundles only have mh3u_server.txt. Reuse that value when it is a
+    genuine externally reachable seed, but ignore a virtual 10.126.126.x Cemu
+    target left by a previous successful launch.
+    """
+    seed = read_host_ip(seedfile_path)
+    if seed and not is_mesh_virtual_address(seed):
+        return seed
+    legacy = read_host_ip(srvfile_path)
+    if legacy and not is_mesh_virtual_address(legacy):
+        return legacy
+    return ""
+
+
+def write_join_seed(seedfile_path, seed):
+    """Persist a non-overlay address for future launcher sessions."""
+    value = str(seed or "").strip()
+    if not value or value == PLACEHOLDER or is_mesh_virtual_address(value):
+        return False
+    write_host_ip(seedfile_path, value)
+    return True
 
 
 _VER_NUM_RE = re.compile(r"\d+")
@@ -659,6 +708,7 @@ def _selftest():
 
         print("== mh3u_server.txt read/write ==")
         srv = tmp / "portable" / "mh3u_server.txt"
+        seed = tmp / "portable" / "mh3u_mesh_seed.txt"
         check(read_host_ip(srv) == "", "missing srvfile -> ''")
         write_host_ip(srv, "26.1.2.3")
         check(read_host_ip(srv) == "26.1.2.3", "round-trip host IP")
@@ -666,6 +716,20 @@ def _selftest():
         check(raw == "26.1.2.3\n", "srvfile is 'ip\\n' LF-only")
         write_host_ip(srv, PLACEHOLDER)
         check(read_host_ip(srv) == "", "placeholder reads back as ''")
+
+        print("== persistent mesh seed is separate from Cemu target ==")
+        write_host_ip(srv, easytier.SERVER_VIRTUAL_IP)
+        check(read_join_seed(seed, srv) == "",
+              "virtual Cemu target is never reused as a mesh seed")
+        write_host_ip(srv, "203.0.113.7")
+        check(read_join_seed(seed, srv) == "203.0.113.7",
+              "legacy public target migrates as the initial mesh seed")
+        check(write_join_seed(seed, "203.0.113.8"), "public mesh seed is persisted")
+        write_host_ip(srv, easytier.SERVER_VIRTUAL_IP)
+        check(read_join_seed(seed, srv) == "203.0.113.8",
+              "saved mesh seed survives virtual Cemu target updates")
+        check(not write_join_seed(seed, easytier.SERVER_VIRTUAL_IP),
+              "virtual address is rejected as a mesh seed")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -689,6 +753,7 @@ def _selftest():
         "portable/",                                             # dir entry
         "portable/settings.xml",
         "portable/mh3u_server.txt",                              # PROTECTED
+        "portable/mh3u_mesh_seed.txt",                           # PROTECTED
         "portable/mlc01/usr/save/system/act/80000001/account.dat",  # PROTECTED
         "portable/mlc01/usr/save/00050000/10118300/user/80000001/game.sav",  # PROTECTED
         "portable/mlc01/usr/title/00050000/10118300/code/x.rpx",  # PROTECTED
@@ -697,6 +762,7 @@ def _selftest():
     plan = plan_overwrite(members)
     protected = [
         "portable/mh3u_server.txt",
+        "portable/mh3u_mesh_seed.txt",
         "portable/mlc01/usr/save/system/act/80000001/account.dat",
         "portable/mlc01/usr/save/00050000/10118300/user/80000001/game.sav",
         "portable/mlc01/usr/title/00050000/10118300/code/x.rpx",
@@ -806,9 +872,34 @@ def _selftest():
             os.environ["MH3U_LOG_FILE"] = old_file
         shutil.rmtree(tmp, ignore_errors=True)
 
+    print("== GUI control flow ==")
+    check("mainloop" in _run_gui.__code__.co_names,
+          "_run_gui reaches Tk.mainloop (guards against accidental early dedent)")
+
     print()
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
+
+
+# Marker file coordinating the UAC elevation relaunch: the elevated window
+# touches it when its auto-join starts, so the old window can avoid launching
+# a second Cemu after the new window takes over.
+ELEVATED_FLAG = "_mh3u_elevated_join.flag"
+
+
+def _touch_elevated_flag(root):
+    try:
+        with open(os.path.join(root, ELEVATED_FLAG), "w") as f:
+            f.write("1")
+    except OSError:
+        pass
+
+
+def _clear_elevated_flag(root):
+    try:
+        os.unlink(os.path.join(root, ELEVATED_FLAG))
+    except OSError:
+        pass
 
 
 # ===========================================================================
@@ -885,7 +976,9 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     ttk.Label(join, text="Host's IP address", font=("Segoe UI", 11, "bold")).pack(anchor="w")
     ttk.Label(join, text="Ask the host — their Tailscale (100.x), Radmin (26.x), "
                          "LAN or public IP.", foreground="#555").pack(anchor="w", pady=(0, 6))
-    ip_var = tk.StringVar(value=read_host_ip(os.path.join(ROOT_DIR, SRVFILE_REL)))
+    ip_var = tk.StringVar(value=read_join_seed(
+        os.path.join(ROOT_DIR, MESH_SEED_REL),
+        os.path.join(ROOT_DIR, SRVFILE_REL)))
     ip_entry = ttk.Entry(join, textvariable=ip_var, width=40)
     ip_entry.pack(anchor="w")
     join_play = ttk.Button(join, text="Save + Play")
@@ -901,28 +994,6 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     ttk.Label(meshrow, textvariable=mesh_status_var, foreground="#555").pack(side="left")
     room_stop_btn = ttk.Button(meshrow, text="Stop mesh", state="disabled")
     room_stop_btn.pack(side="left", padx=8)
-
-    # Marker file coordinating the UAC elevation relaunch: the ELEVATED window
-# touches it when its auto-join starts, so the OLD window can tell "the new
-# window took over" from "the prompt was declined" and avoid launching a
-# second Cemu. Lives in the bundle root (user-writable, not update-protected).
-ELEVATED_FLAG = "_mh3u_elevated_join.flag"
-
-
-def _touch_elevated_flag(root):
-    try:
-        with open(os.path.join(root, ELEVATED_FLAG), "w") as f:
-            f.write("1")
-    except OSError:
-        pass
-
-
-def _clear_elevated_flag(root):
-    try:
-        os.unlink(os.path.join(root, ELEVATED_FLAG))
-    except OSError:
-        pass
-
 
     def _wait_elevated_handoff(log):
         """After relaunching elevated, poll for the elevated window's handoff
@@ -948,6 +1019,12 @@ def _clear_elevated_flag(root):
         if not ip:
             jlog("[Join] Enter the host's IP first.")
             return
+        if is_mesh_virtual_address(ip):
+            jlog("[Join] 10.126.126.x is an internal mesh address, not the server "
+                 "address. Enter the public/LAN/VPN address shared by the host; "
+                 "the launcher selects 10.126.126.1 automatically after joining.")
+            return
+        write_join_seed(os.path.join(ROOT_DIR, MESH_SEED_REL), ip)
         join_play.configure(state="disabled")
 
         def worker():
@@ -972,11 +1049,18 @@ def _clear_elevated_flag(root):
         return the address Cemu should connect to: the server node's virtual
         IP on the mesh, or the plain host address when there is no mesh.
         Returns None only when we relaunched elevated (abort this attempt)."""
+        if is_mesh_virtual_address(ip):
+            log("[mesh] refused internal address %s as a mesh seed; enter the "
+                "server's public/LAN/VPN address" % ip)
+            return None
         if not easytier.binaries_present(ROOT_DIR):
             ok, msg = ensure_mesh_binaries(log)
             if not ok:
-                log("[mesh] %s — connecting directly to %s" % (msg, ip))
-                return ip
+                if ALLOW_DIRECT:
+                    log("[mesh] %s — direct mode explicitly enabled for %s" % (msg, ip))
+                    return ip
+                log("[mesh] %s — play stopped; room networking requires the mesh" % msg)
+                return None
         if not maybe_elevate(log, "join"):
             # A UAC relaunch was triggered. If the prompt is accepted, the
             # ELEVATED window takes over the whole flow (handoff marker) —
@@ -984,8 +1068,11 @@ def _clear_elevated_flag(root):
             # (declined / relaunch failed), fall back to direct play.
             if _wait_elevated_handoff(log):
                 return None
-            log("[mesh] no admin rights (UAC declined?) — connecting directly to %s" % ip)
-            return ip
+            if ALLOW_DIRECT:
+                log("[mesh] no admin rights — direct mode explicitly enabled for %s" % ip)
+                return ip
+            log("[mesh] no admin rights (UAC declined?) — play stopped; accept UAC and retry")
+            return None
         name, secret = easytier.mesh_identity(ip)
         log("[mesh] joining %s's unified mesh ..." % ip)
         net = easytier.EasyTierNet(ROOT_DIR, log=log)
@@ -998,8 +1085,11 @@ def _clear_elevated_flag(root):
             easytier.JOINER_HOSTNAME_PREFIX + secrets.token_hex(3),
             extra_peers=["tcp://%s:%d" % (ip, easytier.LAN_TCP_PORT)])
         if not ok:
-            log("[mesh] %s — connecting directly to %s" % (msg, ip))
-            return ip
+            if ALLOW_DIRECT:
+                log("[mesh] %s — direct mode explicitly enabled for %s" % (msg, ip))
+                return ip
+            log("[mesh] %s — play stopped; no public fallback" % msg)
+            return None
         nets.append(net)
         app.after(0, lambda: room_stop_btn.configure(state="normal"))
         # First mesh join is slow: node discovery + STUN + DHCP routinely takes
@@ -1008,9 +1098,12 @@ def _clear_elevated_flag(root):
         # normal first join; non-mesh servers cost the player at most 45s once.
         vip = net.wait_for_server(45, log=log)
         if not vip:
-            log("[mesh] this server has no mesh (or it is still forming) — "
-                "connecting directly to %s" % ip)
-            return ip
+            if ALLOW_DIRECT:
+                log("[mesh] server mesh unavailable — direct mode explicitly enabled for %s" % ip)
+                return ip
+            log("[mesh] server mesh unavailable — play stopped; close stale EasyTier "
+                "processes and retry")
+            return None
         log("[mesh] joined the unified room mesh — server is at %s" % vip)
         return vip
 
@@ -1048,6 +1141,7 @@ def _clear_elevated_flag(root):
         try:
             if action == "join":
                 write_host_ip(os.path.join(ROOT_DIR, SRVFILE_REL), ip_var.get().strip())
+                write_join_seed(os.path.join(ROOT_DIR, MESH_SEED_REL), ip_var.get().strip())
                 ok = easytier.relaunch_elevated(["--join"])
             elif action == "host":
                 ok = easytier.relaunch_elevated(["--host", ip])
@@ -1194,12 +1288,17 @@ def _clear_elevated_flag(root):
             if not easytier.binaries_present(ROOT_DIR):
                 ok, msg = ensure_mesh_binaries(lambda s: app.after(0, hlog, s))
                 if not ok:
-                    app.after(0, lambda: mesh_var.set("mesh: runtime missing — direct %s" % ip))
-                    return True, ip, None
+                    if ALLOW_DIRECT:
+                        app.after(0, lambda: mesh_var.set("mesh: runtime missing — direct %s" % ip))
+                        return True, ip, None
+                    app.after(0, lambda: mesh_var.set("mesh: runtime missing — hosting stopped"))
+                    return False, None, None
             if not maybe_elevate(lambda s: app.after(0, hlog, s), "host", ip):
-                # Declined/blocked UAC: host without the mesh rather than not host.
-                app.after(0, lambda: mesh_var.set("mesh: off — no admin rights (direct %s)" % ip))
-                return True, ip, None
+                if ALLOW_DIRECT:
+                    app.after(0, lambda: mesh_var.set("mesh: off — direct %s" % ip))
+                    return True, ip, None
+                app.after(0, lambda: mesh_var.set("mesh: no admin rights — hosting stopped"))
+                return False, None, None
             name, secret = easytier.mesh_identity(ip)
             app.after(0, lambda: mesh_var.set("mesh: forming unified room mesh ..."))
             net = easytier.EasyTierNet(ROOT_DIR,
@@ -1209,14 +1308,20 @@ def _clear_elevated_flag(root):
             ok, msg = net.start(name, secret, easytier.SERVER_HOSTNAME,
                                 ipv4=easytier.SERVER_VIRTUAL_IP)
             if not ok:
-                app.after(0, lambda: mesh_var.set("mesh: off (%s)" % msg))
-                return True, ip, None
+                if ALLOW_DIRECT:
+                    app.after(0, lambda: mesh_var.set("mesh: off (%s)" % msg))
+                    return True, ip, None
+                app.after(0, lambda: mesh_var.set("mesh: failed — hosting stopped (%s)" % msg))
+                return False, None, None
             mesh["net"] = net
             nets.append(net)
             vip = net.wait_for_server(60, log=lambda s: app.after(0, hlog, s))
             if not vip:
-                app.after(0, lambda: mesh_var.set("mesh: failed — direct %s" % ip))
-                return True, ip, None
+                if ALLOW_DIRECT:
+                    app.after(0, lambda: mesh_var.set("mesh: failed — direct %s" % ip))
+                    return True, ip, None
+                app.after(0, lambda: mesh_var.set("mesh: failed — hosting stopped"))
+                return False, None, None
             app.after(0, lambda: mesh_var.set("mesh: UP — unified room at %s" % vip))
             threading.Thread(target=poll_peers_loop, daemon=True).start()
             return True, vip, vip
@@ -1232,6 +1337,8 @@ def _clear_elevated_flag(root):
             clog.info("server cmd: %s", " ".join(cmd))
             if mesh_ip:
                 clog.info("mesh: MH3U_ADVERTISE=%s (unified room virtual IP)", advertise)
+                env["MH3U_REQUIRE_MESH"] = "1"
+                env["MH3U_MESH_CIDR"] = "10.126.126.0/24"
             try:
                 flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 proc = subprocess.Popen(

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md. EasyTier is a separate LGPL-3.0 runtime.
 """Embedded EasyTier mesh for MH3U Revival — ONE unified room per server.
 
 The model (from Terracotta's embedded-EasyTier pattern — github.com/MEKCCK/
@@ -59,6 +62,17 @@ from pathlib import Path
 # Override with MH3U_EASYTIER_VERSION / MH3U_EASYTIER_REPO.
 EASYTIER_VERSION = os.environ.get("MH3U_EASYTIER_VERSION", "v2.6.4")
 EASYTIER_REPO = os.environ.get("MH3U_EASYTIER_REPO", "EasyTier/EasyTier")
+
+# Machine-readable component declaration for packagers and license scanners.
+# The hosted-service policy governs official infrastructure only; it is not an
+# additional restriction on the AGPL license granted for this source file.
+P2P_COMPONENT_NOTICE = {
+    "source_license": "AGPL-3.0-only",
+    "runtime": "EasyTier v2.6.4",
+    "runtime_license": "LGPL-3.0-only",
+    "third_party_notices": "THIRD_PARTY_NOTICES.md",
+    "hosted_service_policy": "docs/HOSTED_SERVICE_ACCESS_POLICY.md",
+}
 # Release asset per platform (matches EasyTier's release workflow naming).
 _PLATFORM_ASSET = {
     "nt":  "easytier-windows-x86_64-%s.zip",
@@ -182,6 +196,7 @@ def difficulty_hint(tier):
 CORE_EXE = "easytier-core" + (".exe" if os.name == "nt" else "")
 CLI_EXE = "easytier-cli" + (".exe" if os.name == "nt" else "")
 WINTUN_DLL = "wintun.dll"
+EASYTIER_LICENSE_FILE = "LICENSE.EasyTier.txt"
 # wintun.dll ships in the Windows release (TUN driver); Linux/macOS need nothing extra.
 _NEEDED = (CORE_EXE, CLI_EXE) + ((WINTUN_DLL,) if os.name == "nt" else ())
 
@@ -299,10 +314,22 @@ def ensure_binaries(root, log=print):
                     raise KeyError(n)
                 with zf.open(member) as src, open(os.path.join(d, n), "wb") as dst:
                     shutil.copyfileobj(src, dst)
+            license_member = next(
+                (member for name, member in names.items()
+                 if name.lower() in ("license", "license.txt", "copying")),
+                None)
+            if license_member is not None:
+                with zf.open(license_member) as src, open(
+                        os.path.join(d, EASYTIER_LICENSE_FILE), "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            else:
+                log("  warning: EasyTier archive has no license file; see "
+                    "THIRD_PARTY_NOTICES.md before redistributing the runtime")
     except Exception as e:
         _safe_unlink(tmp_zip)
         for n in _NEEDED:
             _safe_unlink(os.path.join(d, n))
+        _safe_unlink(os.path.join(d, EASYTIER_LICENSE_FILE))
         return False, "unpacking EasyTier failed (%s) — try again later" % e
     _safe_unlink(tmp_zip)
     if not binaries_present(root):

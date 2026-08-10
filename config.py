@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """MH3U NEX server — configuration.
 
 Credentials recovered by reverse-engineering the retail client (MH3G_Cafe_US_v1.3):
@@ -8,6 +11,7 @@ a small search space and a wrong value fails with an obvious PRUDP/RMC parse
 error, so it is the one knob to TUNE empirically — see README "NEX version".
 """
 
+import ipaddress
 import os
 
 # --- RUNTIME-CONFIRMED (2026-06-14, live PRUDP handshake) -------------------
@@ -44,11 +48,32 @@ SECURE_PORT = 1224               # NEX secure server (matchmaking lives here)
 # their observed (NAT-external) address. Leave empty to always use the observed address.
 ADVERTISE_ADDRESS = os.environ.get("MH3U_ADVERTISE", "").strip()
 
+# Unified-mesh room policy. The launcher enables this when it starts a server
+# with EasyTier. Login and hall browsing remain available from any address, but
+# room creation/join are restricted to the mesh so the server never publishes
+# an unreachable public StationURL for a supposedly meshed room.
+REQUIRE_MESH = os.environ.get("MH3U_REQUIRE_MESH", "0").strip().lower() in (
+    "1", "true", "yes", "on"
+)
+MESH_CIDR = os.environ.get("MH3U_MESH_CIDR", "10.126.126.0/24").strip()
+MESH_SERVER_ADDRESS = os.environ.get("MH3U_MESH_SERVER", "10.126.126.1").strip()
+
 # Address clients are TOLD to connect to for the secure server (baked into the kerberos
-# ticket). This must be a REACHABLE address, NOT the 0.0.0.0 bind address — the advertise
-# IP if set (LAN/public/overlay), else 127.0.0.1 for single-machine use. Splitting this
-# from HOST is why binding 0.0.0.0 no longer breaks the ticket.
-SERVER_ADDRESS = ADVERTISE_ADDRESS or "127.0.0.1"
+# ticket). In mesh mode this must be the mesh address, otherwise the client switches back
+# to the public interface immediately after authentication and publishes public P2P URLs.
+# In legacy mode retain the explicit advertise address or the loopback test default.
+SERVER_ADDRESS = (MESH_SERVER_ADDRESS if REQUIRE_MESH
+                  else (ADVERTISE_ADDRESS or "127.0.0.1"))
+
+
+def is_mesh_address(value):
+    try:
+        address = ipaddress.ip_address(str(value or "").strip())
+        if getattr(address, "ipv4_mapped", None) is not None:
+            address = address.ipv4_mapped
+        return address in ipaddress.ip_network(MESH_CIDR, strict=False)
+    except ValueError:
+        return False
 
 # The fixed NEX password the patched Cemu hands the game (napi_act.cpp
 # ACT_GetNexToken redirect). The game derives its kerberos key from this, so the

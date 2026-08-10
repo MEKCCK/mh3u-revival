@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """Tests for the embedded EasyTier mesh module (dist/launcher/easytier.py).
 
 Pure, fast, deterministic, NO network: unified-mesh identity derivation, NAT
@@ -10,6 +13,7 @@ Run:  python tests/test_easytier.py   (from the mh3u_server/ dir)
 import json
 import os
 import sys
+import zipfile
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)                      # mh3u_server/
@@ -145,6 +149,36 @@ def test_binaries_present_missing():
     import shutil
     with tempfile.TemporaryDirectory() as tmp:
         assert not easytier.binaries_present(tmp)
+
+
+def test_runtime_download_preserves_upstream_license():
+    import shutil
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        fixture = os.path.join(tmp, "release.zip")
+        with zipfile.ZipFile(fixture, "w") as zf:
+            for name in easytier._NEEDED:
+                zf.writestr("release/" + name, b"fixture")
+            zf.writestr("release/LICENSE", b"EasyTier upstream license fixture\n")
+
+        original_download = easytier._download_with_limits
+        original_mirrors = easytier.EASYTIER_MIRRORS
+        try:
+            def fake_download(url, dest, log, t0, deadline):
+                shutil.copyfile(fixture, dest)
+                return os.path.getsize(dest), 0.0
+
+            easytier._download_with_limits = fake_download
+            easytier.EASYTIER_MIRRORS = []
+            ok, message = easytier.ensure_binaries(tmp, log=lambda message: None)
+            assert ok, message
+            license_path = os.path.join(
+                easytier.easytier_dir(tmp), easytier.EASYTIER_LICENSE_FILE)
+            with open(license_path, "rb") as license_file:
+                assert license_file.read() == b"EasyTier upstream license fixture\n"
+        finally:
+            easytier._download_with_limits = original_download
+            easytier.EASYTIER_MIRRORS = original_mirrors
 
 
 def test_find_free_rpc_port():

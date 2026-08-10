@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """HTTP JSON data API for the MH3U server — feeds the webui dashboard panel.
 
 A tiny stdlib asyncio HTTP/1.1 server (GET/OPTIONS only) exposing the live

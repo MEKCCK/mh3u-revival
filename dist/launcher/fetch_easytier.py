@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# P2P component notice: see THIRD_PARTY_NOTICES.md and
+# docs/HOSTED_SERVICE_ACCESS_POLICY.md.
 """Standalone downloader for the embedded EasyTier runtime.
 
 The launcher auto-downloads the pinned easytier release into <bundle>/easytier/
