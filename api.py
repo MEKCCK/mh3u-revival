@@ -162,6 +162,7 @@ def snapshot_rooms(full=True):
         g = s.gathering
         out.append({
             "gid": hex(gid),
+            "name": getattr(s, "name", "") or getattr(g, "description", "") or None,
             "host_pid": s.host_pid,
             "host_name": m.NAMES.get(s.host_pid),
             "num_participants": len(s.participants),

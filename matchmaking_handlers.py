@@ -137,6 +137,7 @@ class _Session:
         self.host_pid = host_pid
         self.key = key
         self.participants = {host_pid}
+        self.name = ""
 
 
 class GatheringRegistry:
@@ -627,6 +628,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
             gathering = _placeholder_session()
         sess = REGISTRY.create(gathering, host)
         sess.gathering.session_key = sess.key
+        sess.name = message or ""
         logger.info("create_matchmake_session: gid=0x%x host=%s msg=%r game_mode=%s attribs=%s applen=%d",
                     sess.gid, host, message, getattr(gathering, "game_mode", "?"),
                     getattr(gathering, "attribs", "?"), len(getattr(gathering, "application_data", b"")))
@@ -637,6 +639,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         _require_mesh_client(client, "create_matchmake_session")
         host = _pid(client)
         sess = REGISTRY.create(gathering, host)
+        sess.name = description or ""
         logger.info("create: gid=0x%x host=%s game_mode=%s max=%s",
                     sess.gid, host, getattr(gathering, "game_mode", "?"),
                     getattr(gathering, "max_participants", "?"))
@@ -744,6 +747,16 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
     async def update_notification_data(self, client, type, param1, param2, param3):
         # Called right after entering online mode (once the fp friend-login completes).
         # It's a "set my notification data" op with an empty response; just accept it.
+        # The p3 blob is tab-separated; field 8 is the player's hunter name
+        # (verified from live captures: '...\tYoruaski\t108\t14\t...') — learn it so
+        # the dashboard/panel can show real names instead of blanks.
+        try:
+            if isinstance(param3, str):
+                parts = param3.split("\t")
+                if len(parts) > 8 and parts[8].strip():
+                    NAMES[_pid(client)] = parts[8].strip()
+        except Exception:
+            pass
         logger.debug("update_notification_data: type=%s p1=%s p2=%s p3=%r (pid=%s) -> ok",
                     type, param1, param2, param3, _pid(client))
         return None

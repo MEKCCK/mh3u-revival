@@ -81,8 +81,8 @@ WEBUI_HTML = """<!DOCTYPE html>
   </section>
   <section>
     <h2 data-i18n="huntRooms">狩猎房间</h2>
-    <table><thead><tr><th data-i18n="roomShort">房间</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colMode">模式</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
-    <tbody id="t_rooms"><tr><td colspan="6" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
+    <table><thead><tr><th data-i18n="roomShort">房间</th><th data-i18n="colTitle">名称</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colMode">模式</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
+    <tbody id="t_rooms"><tr><td colspan="7" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
 </div>
 
@@ -301,11 +301,11 @@ async function renderPlayers(){
 async function renderRooms(){
   const d = await Api.rooms();
   const html = !d.count
-    ? '<tr><td colspan="6" class="empty">' + t("emptyRooms") + "</td></tr>"
+    ? '<tr><td colspan="7" class="empty">' + t("emptyRooms") + "</td></tr>"
     : d.rooms.map(r => {
         const full = r.num_participants >= r.max_participants;
         const portGid = (r.attribs && r.attribs[0]) ? "0x" + Number(r.attribs[0]).toString(16) : "-";
-        return "<tr><td>" + roomLabel(r.gid) + '</td><td>' + esc(r.host_name || r.host_pid)
+        return "<tr><td>" + roomLabel(r.gid) + "</td><td>" + esc(r.name || "-") + '</td><td>' + esc(r.host_name || r.host_pid)
           + (r.host_name ? ' <span class="badge host">' + t("hostBadge") + "</span>" : "")
           + '</td><td><span class="badge' + (full ? " full" : "") + '">'
           + r.num_participants + "/" + r.max_participants + "</span></td><td>"
