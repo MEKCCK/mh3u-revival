@@ -436,10 +436,18 @@ class CommunityRegistry:
         # now, owner=SECURE_SERVER_PID, so an owner==0 filter would drop them all).
         return [c.pg for c in self.communities.values() if c.official]
 
-    def lobby_gatherings(self):
-        # The lobbys (sub-gatherings) returned by FindLobbys (find_by_owner). For now
-        # every world advertises the same lobby set; refine to per-world once the
-        # world->lobby selection (tgt_lobby) is mapped live.
+    def lobby_gatherings(self, client=None):
+        """The lobby(s) returned by FindLobbys (find_by_owner).
+
+        Each world owns exactly ONE lobby (world 0x10N <-> lobby 0x20N), and
+        the client's world is tracked on join_community — so a player browsing
+        world 1 sees only Lobby 1, world 2 sees only Lobby 2, etc. Falls back
+        to the whole set only when the world context is unknown (browse
+        before any join)."""
+        if client is not None:
+            world = getattr(client, "_mh3u_world", None)
+            if world is not None and world in self.lobbies:
+                return [self.communities[self.lobbies[world]].pg]
         return [self.communities[g].pg for g in self.lobbies.values()]
 
     def by_gids(self, gids):
@@ -754,23 +762,23 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
          # own title. The create-request message is a COMMENT, not the name
          # (verified from logs: create msg='The_Kagura' vs in-room title
          # '一起狩夥僉745'), so the title is the authoritative room name.
-         try:
-             if isinstance(param3, str):
-                 parts = param3.split("\t")
-                 if len(parts) > 8 and parts[8].strip():
-                     NAMES[_pid(client)] = parts[8].strip()
-                 if len(parts) > 5 and parts[5].strip() and parts[5].strip() != "Not Login":
-                     gid = None
-                     try:
-                         if parts[3].startswith("0x"):
-                             gid = int(parts[3], 16)
-                     except (ValueError, IndexError):
-                         gid = None
-                     sess = REGISTRY.sessions.get(gid) if gid is not None else None
-                     if sess is not None:
-                         sess.name = parts[5].strip()
-         except Exception:
-             pass
+        try:
+            if isinstance(param3, str):
+                parts = param3.split("\t")
+                if len(parts) > 8 and parts[8].strip():
+                    NAMES[_pid(client)] = parts[8].strip()
+                if len(parts) > 5 and parts[5].strip() and parts[5].strip() != "Not Login":
+                    gid = None
+                    try:
+                        if parts[3].startswith("0x"):
+                            gid = int(parts[3], 16)
+                    except (ValueError, IndexError):
+                        gid = None
+                    sess = REGISTRY.sessions.get(gid) if gid is not None else None
+                    if sess is not None:
+                        sess.name = parts[5].strip()
+        except Exception:
+            pass
         logger.debug("update_notification_data: type=%s p1=%s p2=%s p3=%r (pid=%s) -> ok",
                     type, param1, param2, param3, _pid(client))
         return None
@@ -819,6 +827,10 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
     async def join_community(self, client, gid, message, password):
         pid = _pid(client)
         COMMUNITY.join(gid, pid)
+        # Track the world this client is in so FindLobbys returns that world's
+        # OWN lobby (per-world lobby model: 0x10N <-> 0x20N).
+        if gid in COMMUNITY.lobbies:
+            client._mh3u_world = gid
         logger.info("join_community: pid=%s -> hall 0x%x (now %d)",
                     pid, gid, COMMUNITY.communities[gid].pg.num_participants)
 

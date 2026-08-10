@@ -367,7 +367,7 @@ class MatchMakingServer(_Trace, matchmaking.MatchMakingServer):
         if os.environ.get("MH3U_EMPTY_LOBBYS") == "1":
             logger.info("find_by_owner: owner=%s (pid=%s) -> [] (MH3U_EMPTY_LOBBYS=1)", owner, _pid(client))
             return []
-        lobbys = matchmaking_handlers.COMMUNITY.lobby_gatherings()
+        lobbys = matchmaking_handlers.COMMUNITY.lobby_gatherings(client)
         logger.info("find_by_owner(FindLobbys): owner=%s (pid=%s) -> %d lobby(s)",
                     owner, _pid(client), len(lobbys))
         return lobbys
@@ -488,6 +488,13 @@ class MatchMakingServerExt(_Trace, matchmaking.MatchMakingServerExt):
             # Backing out of a world/lobby (EndParticipation fires for the world gid 0x10N
             # and its lobby 0x20N) -> drop membership so the Population count on the World/
             # Lobby list reflects the real live occupancy for everyone else.
+            if gid in matchmaking_handlers.COMMUNITY.lobbies:
+                # Left a world: forget which world this client was browsing so the
+                # next FindLobbys (after re-entering another world) targets the new one.
+                try:
+                    delattr(client, "_mh3u_world")
+                except AttributeError:
+                    pass
             pop = matchmaking_handlers.COMMUNITY.communities[gid].pg.num_participants
             logger.info("end_participation: HALL gid=0x%x (pid=%s) -> left (num_participants=%d)",
                         gid, pid, pop)
