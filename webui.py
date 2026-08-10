@@ -33,7 +33,6 @@ WEBUI_HTML = """<!DOCTYPE html>
   table { width:100%; border-collapse:collapse; font-size:12px; }
   th, td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { color:var(--dim); font-weight:500; }
-  td .plane { color:var(--warn); } td .plane.private { color:var(--ok); } td .plane.public { color:var(--acc); }
   .empty { color:var(--dim); padding:8px 4px; }
   #log { font-family:Consolas,monospace; font-size:11.5px; color:#9fb3c8; max-height:280px;
          overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
@@ -48,16 +47,17 @@ WEBUI_HTML = """<!DOCTYPE html>
 <div class="cards">
   <div class="card"><div class="k">在线玩家</div><div class="v" id="c_players">-</div></div>
   <div class="card"><div class="k">狩猎房间</div><div class="v" id="c_rooms">-</div></div>
-  <div class="card"><div class="k">连接数</div><div class="v" id="c_conns">-</div></div>
+  <div class="card"><div class="k">房间上限（全服）</div><div class="v" id="c_rooms_cap">-</div></div>
+  <div class="card"><div class="k">在线上限（全服）</div><div class="v" id="c_conns_cap">-</div></div>
   <div class="card"><div class="k">运行时长</div><div class="v" id="c_uptime">-</div></div>
-  <div class="card"><div class="k">房间上限</div><div class="v" id="c_caps">-</div></div>
+  <div class="card"><div class="k">大厅容量（每厅）</div><div class="v" id="c_caps">-</div></div>
 </div>
 
 <div class="grid">
   <section>
     <h2>玩家</h2>
-    <table><thead><tr><th>PID</th><th>名字</th><th>IP</th><th>平面</th><th>在线</th><th>空闲</th><th>房间</th><th>大厅</th></tr></thead>
-    <tbody id="t_players"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody></table>
+    <table><thead><tr><th>PID</th><th>名字</th><th>在线</th><th>空闲</th><th>房间</th><th>大厅</th></tr></thead>
+    <tbody id="t_players"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody></table>
   </section>
   <section>
     <h2>狩猎房间</h2>
@@ -68,18 +68,16 @@ WEBUI_HTML = """<!DOCTYPE html>
 
 <div class="grid">
   <section>
-    <h2>大厅 / 集会所</h2>
+    <h2>大厅 / 集会所（港口）</h2>
     <table><thead><tr><th>GID</th><th>名称</th><th>人数</th><th>上限</th><th>类型</th><th>成员</th></tr></thead>
     <tbody id="t_halls"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody></table>
   </section>
   <section>
-    <h2>按 IP 连接数</h2>
-    <table><thead><tr><th>IP</th><th>连接</th></tr></thead>
-    <tbody id="t_ip"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody></table>
+    <h2>服务器状态</h2>
+    <table><thead><tr><th>项</th><th>值</th></tr></thead>
+    <tbody id="t_srv"><tr><td colspan="2" class="empty">加载中…</td></tr></tbody></table>
   </section>
 </div>
-
-<section><h2>服务器日志（最近 60 行，每 5s 刷新）</h2><div id="log"></div></section>
 
 <script>
 "use strict";
@@ -99,7 +97,6 @@ function fmtSec(s){
   if (s < 3600) return (s/60).toFixed(1)+"m";
   return (s/3600).toFixed(1)+"h";
 }
-function planeCls(p){ return (p||"").toLowerCase(); }
 
 async function getJ(path){
   const r = await fetch(path, {cache:"no-store"});
@@ -116,19 +113,19 @@ function renderStatus(){
     + "  ·  NEX v" + (s.nex_version||"-") + "  ·  " + (s.started_at||"");
   $("c_uptime").textContent = fmtSec(s.uptime_s);
   const caps = s.caps||{};
-  $("c_caps").innerHTML = "房 " + caps.rooms + " <small>| 人 " + caps.connections + "</small>";
-  if (s.halls) $("c_caps").innerHTML += " <small>| 厅 " + (s.halls.hall_max||"-") + "</small>";
+  $("c_rooms_cap").textContent = caps.rooms != null ? caps.rooms : "-";
+  $("c_conns_cap").textContent = caps.connections != null ? caps.connections : "-";
+  $("c_caps").textContent = (s.halls && s.halls.hall_max != null ? s.halls.hall_max : "-") + " 人";
 }
 
 async function renderPlayers(){
   const d = await getJ(apiPath("/api/players"));
   $("c_players").textContent = d.count;
   const tb = $("t_players");
-  if (!d.count){ tb.innerHTML = '<tr><td colspan="8" class="empty">暂无玩家</td></tr>'; return; }
+  if (!d.count){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无玩家</td></tr>'; return; }
   tb.innerHTML = d.players.map(p =>
-    "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + esc(p.ip)
-    + '</td><td class="plane ' + planeCls(p.plane) + '">' + esc(p.plane)
-    + '</td><td>' + fmtSec(p.uptime_s) + '</td><td>' + fmtSec(p.idle_s)
+    "<tr><td>" + p.pid + "</td><td>" + esc(p.name) + "</td><td>" + fmtSec(p.uptime_s)
+    + '</td><td>' + fmtSec(p.idle_s)
     + '</td><td>' + (p.rooms||[]).join(" ") + '</td><td>' + (p.halls||[]).join(" ") + "</td></tr>"
   ).join("");
 }
@@ -149,35 +146,35 @@ async function renderRooms(){
 async function renderHalls(){
   const d = await getJ(apiPath("/api/halls"));
   const tb = $("t_halls");
-  if (!d.count){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无大厅</td></tr>'; return; }
-  tb.innerHTML = d.halls.map(h =>
+  const ports = d.halls.filter(h => !h.is_lobby);   // lobbies are game plumbing, hide them
+  if (!ports.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无港口</td></tr>'; return; }
+  tb.innerHTML = ports.map(h =>
     "<tr><td>" + esc(h.gid) + "</td><td>" + esc(h.name)
     + '</td><td>' + h.num_participants + '</td><td>' + h.max_participants
-    + '</td><td>' + (h.is_lobby ? "lobby" : (h.official ? "官方" : "自建"))
+    + '</td><td>' + (h.official ? "官方" : "自建")
     + '</td><td>' + (h.participants||[]).map(p => esc(p.name||p.pid)).join(", ") + "</td></tr>"
   ).join("");
 }
 
-async function renderStats(){
-  const d = await getJ(apiPath("/api/stats"));
-  const c = d.connections||{};
-  $("c_conns").innerHTML = c.current + " <small>/ " + c.max + "</small>";
-  const tb = $("t_ip");
-  if (!(d.by_ip||[]).length){ tb.innerHTML = '<tr><td colspan="2" class="empty">无</td></tr>'; return; }
-  tb.innerHTML = d.by_ip.map(x => "<tr><td>" + esc(x.ip) + "</td><td>" + x.connections + "</td></tr>").join("");
-}
-
-async function renderLog(){
-  try {
-    const d = await getJ(apiPath("/api/log?tail=60"));
-    const el = $("log");
-    const old = el.dataset.n;
-    const n = d.lines.length;
-    if (old === String(n) && el.lastChild && el.lastChild.textContent === d.lines[n-1]) return;
-    el.dataset.n = n;
-    el.textContent = d.lines.join("\\n");
-    el.scrollTop = el.scrollHeight;
-  } catch(e){ $("log").textContent = "日志加载失败: " + e.message; }
+async function renderSrv(){
+  const s = statusData;
+  const tb = $("t_srv");
+  if (!s){ tb.innerHTML = '<tr><td colspan="2" class="empty">无数据</td></tr>'; return; }
+  const rows = [
+    ["服务器", s.server || "-"],
+    ["游戏服务器 ID", s.game_server_id || "-"],
+    ["NEX 版本", s.nex_version != null ? "v" + s.nex_version : "-"],
+    ["监听端口", "auth=" + ((s.ports||{}).auth) + " · secure=" + ((s.ports||{}).secure)
+                 + " · natcheck=" + ((s.ports||{}).natcheck)],
+    ["公布地址", s.advertised_address || "-"],
+    ["港口数量", s.halls ? (s.halls.num_worlds != null ? s.halls.num_worlds : "-") : "-"],
+    ["大厅容量", s.halls ? (s.halls.hall_max != null ? s.halls.hall_max + " 人/港" : "-") : "-"],
+    ["启动时间", s.started_at || "-"],
+    ["密码房策略", s.password_room_policy
+                  ? (s.password_room_policy.enabled ? "启用（已销毁 " + (s.password_room_policy.destroyed||0) + " 个）" : "关闭")
+                  : "-"],
+  ];
+  tb.innerHTML = rows.map(r => "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>").join("");
 }
 
 async function tick(){
@@ -189,13 +186,12 @@ async function tick(){
     $("sub").textContent = "API 不可达: " + e.message;
   }
   renderStatus();
-  try { await renderPlayers(); } catch(e){ $("t_players").innerHTML = '<tr><td colspan="8" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
+  renderSrv();
+  try { await renderPlayers(); } catch(e){ $("t_players").innerHTML = '<tr><td colspan="6" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
   try { await renderRooms(); } catch(e){ $("t_rooms").innerHTML = '<tr><td colspan="5" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
   try { await renderHalls(); } catch(e){ $("t_halls").innerHTML = '<tr><td colspan="6" class="empty">加载失败: '+esc(e.message)+'</td></tr>'; }
-  try { await renderStats(); } catch(e){ /* cards keep last value */ }
 }
 tick(); setInterval(tick, 3000);
-setInterval(renderLog, 5000); renderLog();
 </script>
 </body>
 </html>

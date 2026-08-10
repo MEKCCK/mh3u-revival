@@ -4,7 +4,7 @@ Headless and dependency-free: the API module lazily imports the game-state
 module (which needs NintendoClients), so without it the endpoints must still
 answer 200 with empty/fail-open models — exactly what this test exercises, on
 a real loopback HTTP server with ephemeral port. Also checks CORS, OPTIONS,
-404s, the log ring buffer, and the status snapshot.
+404s, the privacy rules (no IPs / no logs in any mode), and the status snapshot.
 
 Run:  python tests/test_api.py   (from the mh3u_server/ dir)
 """
@@ -59,14 +59,24 @@ async def _scenario():
                         return r.status, dict(r.headers), json.loads(r.read())
                 return asyncio.to_thread(_do)
 
-            # sanitized (no token): no access_key, masked ip, redacted log
+            # no token: access_key hidden
             st, _, body = await get("/api/status")
-            check(st == 200 and "access_key" not in body, "sanitized: access_key hidden")
-            st, _, body = await get("/api/log?tail=200")
-            redacted = [l for l in body["lines"] if "1099309351" in l or re.search(
-                r"\b(?:\d{1,3}\.){3}\d{1,3}\b", l)]
-            check(not redacted, "sanitized: log has no PIDs/IPs (%d leaked)" % len(redacted))
-            # full (token in query): access_key present, raw log lines kept
+            check(st == 200 and "access_key" not in body, "no token: access_key hidden")
+            # players NEVER carry an ip/plane field, in any mode
+            st, _, body = await get("/api/players")
+            check(st == 200 and all("ip" not in p and "plane" not in p
+                                    for p in body.get("players", [])),
+                  "players: no ip/plane even without token")
+            st, _, body = await get("/api/players?token=sekrit-token")
+            check(st == 200 and all("ip" not in p for p in body.get("players", [])),
+                  "players: no ip even WITH token")
+            # /api/log is gone entirely
+            st, _, _ = await get("/api/log?tail=50")
+            check(st == 404, "/api/log removed (404)")
+            # stats: no per-IP data
+            st, _, body = await get("/api/stats")
+            check(st == 200 and "by_ip" not in body, "stats: no by_ip")
+            # full (token in query): access_key present
             st, _, body = await get("/api/status?token=sekrit-token")
             check(st == 200 and body.get("access_key") == "cb2b2f5a",
                   "token: access_key visible")
@@ -74,9 +84,9 @@ async def _scenario():
             st, _, body = await get_raw("/api/status",
                                         headers={"X-Auth-Token": "sekrit-token"})
             check(st == 200 and "access_key" in body, "token header accepted")
-            # wrong token still sanitized
+            # wrong token still hides access_key
             st, _, body = await get("/api/status?token=wrong")
-            check(st == 200 and "access_key" not in body, "wrong token -> sanitized")
+            check(st == 200 and "access_key" not in body, "wrong token -> hidden")
     finally:
         api.API_TOKEN = old_token
 
@@ -114,17 +124,8 @@ async def _scenario():
         st, _, body = await get("/api/halls")
         check(st == 200 and body["count"] == 0, "halls fail-open")
         st, _, body = await get("/api/stats")
-        check(st == 200 and "by_ip" in body and "reaper" in body, "stats shape")
+        check(st == 200 and "reaper" in body and "by_ip" not in body, "stats shape (no by_ip)")
         check(body["connections"]["max"] == api.limits.MAX_CONNECTIONS, "stats uses limits")
-
-        # --- log ring -----------------------------------------------------
-        import logging
-        logging.getLogger("mh3u.api-test").info("ring-marker-%d", 1234)
-        st, _, body = await get("/api/log?tail=50")
-        check(st == 200 and isinstance(body["lines"], list), "/api/log returns lines")
-        check(any("ring-marker-1234" in line for line in body["lines"]), "log ring captured")
-        st, _, body = await get("/api/log?tail=99999")
-        check(len(body["lines"]) <= 500, "/api/log tail capped at 500")
 
         # --- index / 404 / methods ---------------------------------------
         st, _, body = await get("/api/")

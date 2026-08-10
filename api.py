@@ -24,22 +24,22 @@ Env knobs (all optional):
 
 Endpoints:
   GET /api/status   server identity, topology, advertised address, caps, uptime
-  GET /api/players  live secure connections (pid, name, ip, plane, uptime, idle,
-                    room/hall memberships)
+  GET /api/players  live connections (pid, name, uptime, idle, room/hall
+                    memberships) — NO IP addresses, ever
   GET /api/rooms    hunt rooms (gid, host, participants, attribs, app-buffer len)
-  GET /api/halls    gathering halls + lobbies (gid, name, owner, population)
-  GET /api/stats    occupancy, caps, per-IP connections, rate-limit state
-  GET /api/log      recent log lines (?tail=N, capped)
+  GET /api/halls    gathering halls (gid, name, owner, population)
+  GET /api/stats    occupancy, caps, rate-limit state — NO per-IP data
   GET /api/         endpoint index
+
+PRIVACY: no IP addresses and no log lines are exposed through the API or the
+panel — in any mode, for any caller. The only token-gated fields are
+/api/status access_key and /api/players cid.
 """
 import os
-import re
 import json
 import time
 import asyncio
 import logging
-import threading
-import collections
 
 import config
 import limits
@@ -50,85 +50,17 @@ logger = logging.getLogger("mh3u.api")
 API_PORT = limits._int_env("MH3U_API_PORT", 1623)
 API_BIND = os.environ.get("MH3U_API_BIND", "127.0.0.1")
 API_ENABLED = os.environ.get("MH3U_API", "1") != "0"
-API_LOG_RING = os.environ.get("MH3U_API_LOG", "on") != "off"
 
-# Privacy: the API/panel may be publicly reachable (MH3U_API_BIND=0.0.0.0), so
-# by default only LOOPBACK clients see full detail; everyone else gets
-# sanitized data (no IPs, no names, log redacted). Setting MH3U_API_TOKEN makes
-# full detail available from anywhere to requests carrying the token
-# (?token=... or X-Auth-Token header) — e.g. the operator's browser panel.
+# Privacy: the API/panel may be publicly reachable (MH3U_API_BIND=0.0.0.0).
+# IP addresses and logs are NOT exposed AT ALL — never in any mode. Only
+# these stay gated behind the operator token / loopback:
+#   * /api/status access_key
+#   * /api/players cid (internal connection id)
+# Setting MH3U_API_TOKEN makes full detail available from anywhere to
+# requests carrying the token (?token=... or X-Auth-Token header).
 API_TOKEN = os.environ.get("MH3U_API_TOKEN", "").strip()
 
 _STARTED_AT = time.time()
-
-
-# --- privacy helpers --------------------------------------------------------
-def _mask_ip(ip):
-    """First-two-octets mask: '36.62.189.214' -> '36.62.***.***'."""
-    if not ip:
-        return None
-    if ":" in ip:                      # IPv6 — mask everything but the prefix
-        parts = ip.split(":")
-        return ":".join(parts[:2]) + ":…" if len(parts) > 2 else "…"
-    parts = ip.split(".")
-    if len(parts) == 4:
-        return "%s.%s.***.***" % (parts[0], parts[1])
-    return "***"
-
-_IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-# NEX PIDs (random account ids) are 8-10 digit numbers; mask them in logs.
-_PID_RE = re.compile(r"\b\d{8,10}\b")
-
-
-def _redact_log_line(line):
-    """Strip IPs and NEX PIDs from a log line (public /api/log view)."""
-    line = _IPV4_RE.sub(lambda m: _mask_ip(m.group(0)), line)
-    return _PID_RE.sub("***", line)
-
-# ---------------------------------------------------------------------------
-# Log ring buffer — /api/log serves the last N formatted lines.
-# ---------------------------------------------------------------------------
-
-class _RingHandler(logging.Handler):
-    """Captures formatted log lines (INFO+) into a bounded ring buffer."""
-
-    def __init__(self, cap=800):
-        super().__init__(level=logging.INFO)
-        self._buf = collections.deque(maxlen=cap)
-        self._lock = threading.Lock()
-        self.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S"))
-
-    def emit(self, record):
-        try:
-            line = self.format(record)
-            with self._lock:
-                self._buf.append(line)
-        except Exception:
-            pass
-
-    def tail(self, n):
-        with self._lock:
-            return list(self._buf)[-n:]
-
-
-_ring = _RingHandler()
-_ring_attached = False
-
-
-def _ensure_ring():
-    """Attach the ring handler to the root logger exactly once."""
-    global _ring_attached
-    if _ring_attached or not API_LOG_RING:
-        return
-    _ring_attached = True
-    # The ring captures INFO+; make sure the root logger's own level doesn't
-    # gate records before they reach our handler (the server's basicConfig
-    # already sets INFO; standalone use must too).
-    root = logging.getLogger()
-    if root.level > logging.INFO:
-        root.setLevel(logging.INFO)
-    root.addHandler(_ring)
 
 
 # ---------------------------------------------------------------------------
@@ -142,10 +74,6 @@ def _mh():
         return m
     except Exception:
         return None
-
-
-def _client_ip(client):
-    return getattr(client, "_mh3u_ip", None) or limits.remote_ip(client)
 
 
 def snapshot_status(full=True):
@@ -197,7 +125,6 @@ def snapshot_players(full=True):
     now = time.monotonic()
     out = []
     for pid, client in list(m.CLIENTS.items()):
-        ip = _client_ip(client)
         last = getattr(client, "_mh3u_last_rx", None)
         conn_at = getattr(client, "_mh3u_connected_at", None)
         rooms = [gid for gid, s in m.REGISTRY.sessions.items()
@@ -206,19 +133,14 @@ def snapshot_players(full=True):
                  if pid in c.participants]
         entry = {
             "pid": pid,
-            "plane": limits.plane_name(ip) if ip else "unknown",
+            "name": m.NAMES.get(pid),
             "uptime_s": round(now - conn_at, 1) if conn_at else None,
             "idle_s": round(now - last, 1) if last else None,
             "rooms": [hex(g) for g in rooms],
             "halls": [hex(g) for g in halls],
         }
         if full:
-            entry["name"] = m.NAMES.get(pid)
-            entry["ip"] = ip
             entry["cid"] = getattr(client, "_mh3u_cid", None)
-        else:
-            entry["name"] = None
-            entry["ip"] = _mask_ip(ip)      # first-two-octets mask
         out.append(entry)
     out.sort(key=lambda p: p["pid"])
     return {"players": out, "count": len(out)}
@@ -234,14 +156,14 @@ def snapshot_rooms(full=True):
         out.append({
             "gid": hex(gid),
             "host_pid": s.host_pid,
-            "host_name": m.NAMES.get(s.host_pid) if full else None,
+            "host_name": m.NAMES.get(s.host_pid),
             "num_participants": len(s.participants),
             "max_participants": getattr(g, "max_participants", None),
             "game_mode": getattr(g, "game_mode", None),
             "attribs": list(getattr(g, "attribs", []) or []),
             "application_data_len": len(getattr(g, "application_data", b"") or b""),
             "participants": [
-                {"pid": p, "name": m.NAMES.get(p) if full else None}
+                {"pid": p, "name": m.NAMES.get(p)}
                 for p in sorted(s.participants)],
         })
     return {"rooms": out, "count": len(out)}
@@ -271,7 +193,7 @@ def snapshot_halls(full=True):
             "displayed_population": getattr(pg, "num_participants", None),
             "max_participants": getattr(pg, "max_participants", None),
             "participants": [
-                {"pid": p, "name": m.NAMES.get(p) if full else None}
+                {"pid": p, "name": m.NAMES.get(p)}
                 for p in sorted(c.participants)],
         })
     return {"halls": out, "count": len(out)}
@@ -296,8 +218,6 @@ def snapshot_stats(full=True):
             "runtime": len(m.COMMUNITY._runtime_gids) if m is not None else 0,
             "max": limits.MAX_RUNTIME_COMMUNITIES,
         },
-        "by_ip": [{"ip": ip if full else _mask_ip(ip), "connections": n}
-                  for ip, n in sorted(limits._ip_conns.items())],
         "shout_tracked_pids": len(limits._shout_buckets),
         "shout_rate": {"per_sec": limits.SHOUTS_PER_SEC, "burst": limits.SHOUT_BURST},
     }
@@ -310,17 +230,6 @@ def snapshot_stats(full=True):
     return out
 
 
-def snapshot_log(tail, full=True):
-    try:
-        n = max(0, min(int(tail), 500))
-    except (TypeError, ValueError):
-        n = 200
-    lines = _ring.tail(n)
-    if not full:
-        lines = [_redact_log_line(line) for line in lines]
-    return {"lines": lines}
-
-
 # ---------------------------------------------------------------------------
 # Minimal HTTP/1.1 plumbing (GET/OPTIONS, JSON, CORS-open)
 # ---------------------------------------------------------------------------
@@ -331,7 +240,6 @@ _ROUTES = {
     "/api/rooms": ("rooms", snapshot_rooms),
     "/api/halls": ("halls", snapshot_halls),
     "/api/stats": ("stats", snapshot_stats),
-    "/api/log": ("log", snapshot_log),
 }
 
 # The built-in webui panel (self-contained HTML, zero external deps).
@@ -430,7 +338,6 @@ async def _handle(reader, writer):
             _json_response(writer, 200, {
                 "endpoints": sorted(_ROUTES),
                 "panel": "/panel",
-                "hint": "/api/log?tail=200",
             })
             return
         entry = _ROUTES.get(route_path)
@@ -486,7 +393,6 @@ class API:
         self._server = None
 
     async def __aenter__(self):
-        _ensure_ring()
         self._server = await asyncio.start_server(
             _client_connected, self.host, self.port)
         logger.info("api: dashboard JSON API on http://%s:%d/api/ (bind %s:%d)",
