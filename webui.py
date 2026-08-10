@@ -81,7 +81,7 @@ WEBUI_HTML = """<!DOCTYPE html>
   </section>
   <section>
     <h2 data-i18n="huntRooms">狩猎房间</h2>
-    <table><thead><tr><th>GID</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colMode">模式</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
+    <table><thead><tr><th data-i18n="roomShort">房间</th><th data-i18n="colHost">房主</th><th data-i18n="colCount">人数</th><th data-i18n="colMode">模式</th><th data-i18n="colRoomPort">所在港口</th><th data-i18n="colMembers">参与者</th></tr></thead>
     <tbody id="t_rooms"><tr><td colspan="6" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
 </div>
@@ -89,7 +89,7 @@ WEBUI_HTML = """<!DOCTYPE html>
 <div class="grid">
   <section>
     <h2 data-i18n="ports">港口</h2>
-    <table><thead><tr><th>GID</th><th data-i18n="colTitle">名称</th><th data-i18n="colCount">人数</th><th data-i18n="colMax">上限</th><th data-i18n="colType">类型</th></tr></thead>
+    <table><thead><tr><th data-i18n="colTitle">名称</th><th data-i18n="colCount">人数</th><th data-i18n="colMax">上限</th><th data-i18n="colType">类型</th></tr></thead>
     <tbody id="t_halls"><tr><td colspan="4" class="empty" data-i18n="loading">加载中…</td></tr></tbody></table>
   </section>
   <section>
