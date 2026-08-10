@@ -85,6 +85,12 @@ WEBUI_HTML = """<!DOCTYPE html>
 "use strict";
 const $ = id => document.getElementById(id);
 let statusData = {};
+// If the operator opened the panel as /panel?token=xxx, pass the token along
+// to the API so they see full detail; otherwise the API sanitizes.
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+function apiPath(p){
+  return TOKEN ? p + (p.indexOf("?") >= 0 ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : p;
+}
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function fmtSec(s){
@@ -115,7 +121,7 @@ function renderStatus(){
 }
 
 async function renderPlayers(){
-  const d = await getJ("/api/players");
+  const d = await getJ(apiPath("/api/players"));
   $("c_players").textContent = d.count;
   const tb = $("t_players");
   if (!d.count){ tb.innerHTML = '<tr><td colspan="8" class="empty">暂无玩家</td></tr>'; return; }
@@ -128,7 +134,7 @@ async function renderPlayers(){
 }
 
 async function renderRooms(){
-  const d = await getJ("/api/rooms");
+  const d = await getJ(apiPath("/api/rooms"));
   $("c_rooms").textContent = d.count;
   const tb = $("t_rooms");
   if (!d.count){ tb.innerHTML = '<tr><td colspan="5" class="empty">暂无房间</td></tr>'; return; }
@@ -141,7 +147,7 @@ async function renderRooms(){
 }
 
 async function renderHalls(){
-  const d = await getJ("/api/halls");
+  const d = await getJ(apiPath("/api/halls"));
   const tb = $("t_halls");
   if (!d.count){ tb.innerHTML = '<tr><td colspan="6" class="empty">暂无大厅</td></tr>'; return; }
   tb.innerHTML = d.halls.map(h =>
@@ -153,7 +159,7 @@ async function renderHalls(){
 }
 
 async function renderStats(){
-  const d = await getJ("/api/stats");
+  const d = await getJ(apiPath("/api/stats"));
   const c = d.connections||{};
   $("c_conns").innerHTML = c.current + " <small>/ " + c.max + "</small>";
   const tb = $("t_ip");
@@ -163,7 +169,7 @@ async function renderStats(){
 
 async function renderLog(){
   try {
-    const d = await getJ("/api/log?tail=60");
+    const d = await getJ(apiPath("/api/log?tail=60"));
     const el = $("log");
     const old = el.dataset.n;
     const n = d.lines.length;
@@ -176,7 +182,7 @@ async function renderLog(){
 
 async function tick(){
   try {
-    statusData = await getJ("/api/status");
+    statusData = await getJ(apiPath("/api/status"));
     $("dot").classList.add("ok");
   } catch(e){
     $("dot").classList.remove("ok");

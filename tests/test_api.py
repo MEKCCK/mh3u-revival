@@ -11,6 +11,7 @@ Run:  python tests/test_api.py   (from the mh3u_server/ dir)
 import asyncio
 import json
 import os
+import re
 import sys
 import http.client
 import urllib.request
@@ -30,6 +31,56 @@ async def _scenario():
             failures.append(msg)
         print("  [%s] %s" % ("PASS" if cond else "FAIL", msg))
 
+    # --- privacy: token mode (full vs sanitized) ---------------------------
+    old_token = api.API_TOKEN
+    api.API_TOKEN = "sekrit-token"
+    try:
+        async with api.API("127.0.0.1", 0) as srv:
+            port = srv._server.sockets[0].getsockname()[1]
+            base = "http://127.0.0.1:%d" % port
+
+            def get(path):
+                def _do():
+                    try:
+                        with urllib.request.urlopen(base + path, timeout=5) as r:
+                            return r.status, dict(r.headers), json.loads(r.read())
+                    except urllib.error.HTTPError as e:
+                        try:
+                            body = json.loads(e.read())
+                        except Exception:
+                            body = {}
+                        return e.code, dict(e.headers), body
+                return asyncio.to_thread(_do)
+
+            def get_raw(path, headers=None):
+                def _do():
+                    req = urllib.request.Request(base + path, headers=headers or {})
+                    with urllib.request.urlopen(req, timeout=5) as r:
+                        return r.status, dict(r.headers), json.loads(r.read())
+                return asyncio.to_thread(_do)
+
+            # sanitized (no token): no access_key, masked ip, redacted log
+            st, _, body = await get("/api/status")
+            check(st == 200 and "access_key" not in body, "sanitized: access_key hidden")
+            st, _, body = await get("/api/log?tail=200")
+            redacted = [l for l in body["lines"] if "1099309351" in l or re.search(
+                r"\b(?:\d{1,3}\.){3}\d{1,3}\b", l)]
+            check(not redacted, "sanitized: log has no PIDs/IPs (%d leaked)" % len(redacted))
+            # full (token in query): access_key present, raw log lines kept
+            st, _, body = await get("/api/status?token=sekrit-token")
+            check(st == 200 and body.get("access_key") == "cb2b2f5a",
+                  "token: access_key visible")
+            # full (token header)
+            st, _, body = await get_raw("/api/status",
+                                        headers={"X-Auth-Token": "sekrit-token"})
+            check(st == 200 and "access_key" in body, "token header accepted")
+            # wrong token still sanitized
+            st, _, body = await get("/api/status?token=wrong")
+            check(st == 200 and "access_key" not in body, "wrong token -> sanitized")
+    finally:
+        api.API_TOKEN = old_token
+
+    # --- no-token mode: loopback is full, remote would be sanitized --------
     async with api.API("127.0.0.1", 0) as srv:
         port = srv._server.sockets[0].getsockname()[1]
         base = "http://127.0.0.1:%d" % port

@@ -33,6 +33,7 @@ Endpoints:
   GET /api/         endpoint index
 """
 import os
+import re
 import json
 import time
 import asyncio
@@ -51,7 +52,38 @@ API_BIND = os.environ.get("MH3U_API_BIND", "127.0.0.1")
 API_ENABLED = os.environ.get("MH3U_API", "1") != "0"
 API_LOG_RING = os.environ.get("MH3U_API_LOG", "on") != "off"
 
+# Privacy: the API/panel may be publicly reachable (MH3U_API_BIND=0.0.0.0), so
+# by default only LOOPBACK clients see full detail; everyone else gets
+# sanitized data (no IPs, no names, log redacted). Setting MH3U_API_TOKEN makes
+# full detail available from anywhere to requests carrying the token
+# (?token=... or X-Auth-Token header) — e.g. the operator's browser panel.
+API_TOKEN = os.environ.get("MH3U_API_TOKEN", "").strip()
+
 _STARTED_AT = time.time()
+
+
+# --- privacy helpers --------------------------------------------------------
+def _mask_ip(ip):
+    """First-two-octets mask: '36.62.189.214' -> '36.62.***.***'."""
+    if not ip:
+        return None
+    if ":" in ip:                      # IPv6 — mask everything but the prefix
+        parts = ip.split(":")
+        return ":".join(parts[:2]) + ":…" if len(parts) > 2 else "…"
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return "%s.%s.***.***" % (parts[0], parts[1])
+    return "***"
+
+_IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+# NEX PIDs (random account ids) are 8-10 digit numbers; mask them in logs.
+_PID_RE = re.compile(r"\b\d{8,10}\b")
+
+
+def _redact_log_line(line):
+    """Strip IPs and NEX PIDs from a log line (public /api/log view)."""
+    line = _IPV4_RE.sub(lambda m: _mask_ip(m.group(0)), line)
+    return _PID_RE.sub("***", line)
 
 # ---------------------------------------------------------------------------
 # Log ring buffer — /api/log serves the last N formatted lines.
@@ -116,13 +148,12 @@ def _client_ip(client):
     return getattr(client, "_mh3u_ip", None) or limits.remote_ip(client)
 
 
-def snapshot_status():
+def snapshot_status(full=True):
     m = _mh()
     out = {
         "server": "mh3u-revival",
         "game_server_id": hex(config.GAME_SERVER_ID),
         "nex_version": config.NEX_VERSION,
-        "access_key": config.ACCESS_KEY,
         "bind": config.HOST,
         "ports": {
             "auth": config.AUTH_PORT,
@@ -142,6 +173,8 @@ def snapshot_status():
             "runtime_communities": limits.MAX_RUNTIME_COMMUNITIES,
         },
     }
+    if full:
+        out["access_key"] = config.ACCESS_KEY
     if m is not None:
         out["halls"] = {
             "hall_max": getattr(m, "HALL_MAX", None),
@@ -157,7 +190,7 @@ def snapshot_status():
     return out
 
 
-def snapshot_players():
+def snapshot_players(full=True):
     m = _mh()
     if m is None:
         return {"players": [], "count": 0, "error": "state unavailable"}
@@ -171,22 +204,27 @@ def snapshot_players():
                  if pid in s.participants]
         halls = [gid for gid, c in m.COMMUNITY.communities.items()
                  if pid in c.participants]
-        out.append({
+        entry = {
             "pid": pid,
-            "name": m.NAMES.get(pid),
-            "ip": ip,
             "plane": limits.plane_name(ip) if ip else "unknown",
-            "cid": getattr(client, "_mh3u_cid", None),
             "uptime_s": round(now - conn_at, 1) if conn_at else None,
             "idle_s": round(now - last, 1) if last else None,
             "rooms": [hex(g) for g in rooms],
             "halls": [hex(g) for g in halls],
-        })
+        }
+        if full:
+            entry["name"] = m.NAMES.get(pid)
+            entry["ip"] = ip
+            entry["cid"] = getattr(client, "_mh3u_cid", None)
+        else:
+            entry["name"] = None
+            entry["ip"] = _mask_ip(ip)      # first-two-octets mask
+        out.append(entry)
     out.sort(key=lambda p: p["pid"])
     return {"players": out, "count": len(out)}
 
 
-def snapshot_rooms():
+def snapshot_rooms(full=True):
     m = _mh()
     if m is None:
         return {"rooms": [], "count": 0, "error": "state unavailable"}
@@ -196,14 +234,15 @@ def snapshot_rooms():
         out.append({
             "gid": hex(gid),
             "host_pid": s.host_pid,
-            "host_name": m.NAMES.get(s.host_pid),
+            "host_name": m.NAMES.get(s.host_pid) if full else None,
             "num_participants": len(s.participants),
             "max_participants": getattr(g, "max_participants", None),
             "game_mode": getattr(g, "game_mode", None),
             "attribs": list(getattr(g, "attribs", []) or []),
             "application_data_len": len(getattr(g, "application_data", b"") or b""),
             "participants": [
-                {"pid": p, "name": m.NAMES.get(p)} for p in sorted(s.participants)],
+                {"pid": p, "name": m.NAMES.get(p) if full else None}
+                for p in sorted(s.participants)],
         })
     return {"rooms": out, "count": len(out)}
 
@@ -215,7 +254,7 @@ def _hall_name(pg):
     return str(name).split(":")[0] or str(name)
 
 
-def snapshot_halls():
+def snapshot_halls(full=True):
     m = _mh()
     if m is None:
         return {"halls": [], "count": 0, "error": "state unavailable"}
@@ -232,12 +271,13 @@ def snapshot_halls():
             "displayed_population": getattr(pg, "num_participants", None),
             "max_participants": getattr(pg, "max_participants", None),
             "participants": [
-                {"pid": p, "name": m.NAMES.get(p)} for p in sorted(c.participants)],
+                {"pid": p, "name": m.NAMES.get(p) if full else None}
+                for p in sorted(c.participants)],
         })
     return {"halls": out, "count": len(out)}
 
 
-def snapshot_stats():
+def snapshot_stats(full=True):
     m = _mh()
     now = time.monotonic()
     out = {
@@ -256,7 +296,7 @@ def snapshot_stats():
             "runtime": len(m.COMMUNITY._runtime_gids) if m is not None else 0,
             "max": limits.MAX_RUNTIME_COMMUNITIES,
         },
-        "by_ip": [{"ip": ip, "connections": n}
+        "by_ip": [{"ip": ip if full else _mask_ip(ip), "connections": n}
                   for ip, n in sorted(limits._ip_conns.items())],
         "shout_tracked_pids": len(limits._shout_buckets),
         "shout_rate": {"per_sec": limits.SHOUTS_PER_SEC, "burst": limits.SHOUT_BURST},
@@ -270,12 +310,15 @@ def snapshot_stats():
     return out
 
 
-def snapshot_log(tail):
+def snapshot_log(tail, full=True):
     try:
         n = max(0, min(int(tail), 500))
     except (TypeError, ValueError):
         n = 200
-    return {"lines": _ring.tail(n)}
+    lines = _ring.tail(n)
+    if not full:
+        lines = [_redact_log_line(line) for line in lines]
+    return {"lines": lines}
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +336,31 @@ _ROUTES = {
 
 # The built-in webui panel (self-contained HTML, zero external deps).
 _PANEL_PATHS = ("/", "/panel", "/webui")
+
+
+def _header_value(head, name):
+    """Case-insensitive header lookup on the raw request head bytes."""
+    want = (name + ":").lower()
+    for line in head.decode("latin-1", "replace").split("\r\n"):
+        if line.lower().startswith(want):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _is_full_access(params, head, writer):
+    """Full detail vs sanitized:
+
+      * If MH3U_API_TOKEN is configured: full only when the request carries
+        the matching token (?token=... or X-Auth-Token header).
+      * Otherwise: full only for loopback callers (the operator's shell).
+    Everything else gets sanitized data — no IPs, no names, redacted logs.
+    """
+    if API_TOKEN:
+        token = params.get("token") or _header_value(head, "x-auth-token")
+        return bool(token) and token == API_TOKEN
+    peer = writer.get_extra_info("peername") if writer is not None else None
+    host = peer[0] if peer else ""
+    return host in ("127.0.0.1", "::1", "localhost")
 
 
 def _json_response(writer, code, payload, extra_headers=()):
@@ -375,11 +443,12 @@ async def _handle(reader, writer):
             if "=" in pair:
                 k, _, v = pair.partition("=")
                 params[k] = v
+        full = _is_full_access(params, head, writer)
         try:
             if _name == "log":
-                payload = fn(params.get("tail", "200"))
+                payload = fn(params.get("tail", "200"), full=full)
             else:
-                payload = fn()
+                payload = fn(full=full)
             _json_response(writer, 200, payload)
         except Exception as e:
             logger.exception("api: %s failed: %s", route_path, e)
