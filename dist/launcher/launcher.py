@@ -940,7 +940,9 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                 log("[mesh] %s — connecting directly to %s" % (msg, ip))
                 return ip
         if not maybe_elevate(log, "join"):
-            return None
+            # Declined/blocked UAC: NEVER block play — fall back to direct.
+            log("[mesh] no admin rights (UAC declined?) — connecting directly to %s" % ip)
+            return ip
         name, secret = easytier.mesh_identity(ip)
         log("[mesh] joining %s's unified mesh ..." % ip)
         net = easytier.EasyTierNet(ROOT_DIR, log=log)
@@ -1144,7 +1146,9 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                     app.after(0, lambda: mesh_var.set("mesh: runtime missing — direct %s" % ip))
                     return True, ip, None
             if not maybe_elevate(lambda s: app.after(0, hlog, s), "host", ip):
-                return False, None, None
+                # Declined/blocked UAC: host without the mesh rather than not host.
+                app.after(0, lambda: mesh_var.set("mesh: off — no admin rights (direct %s)" % ip))
+                return True, ip, None
             name, secret = easytier.mesh_identity(ip)
             app.after(0, lambda: mesh_var.set("mesh: forming unified room mesh ..."))
             net = easytier.EasyTierNet(ROOT_DIR,
