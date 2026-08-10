@@ -152,6 +152,11 @@ def snapshot_status():
             "room_max": getattr(m, "ROOM_MAX", None),
             "num_worlds": getattr(m, "NUM_WORLDS", None),
         }
+        out["password_room_policy"] = {
+            "enabled": getattr(m, "DESTROY_PASSWORD_ROOMS", False),
+            "destroyed": getattr(m.REGISTRY, "password_rooms_destroyed", 0),
+            "scan_seconds": getattr(m, "PASSWORD_ROOM_SCAN_SECONDS", None),
+        }
     return out
 
 

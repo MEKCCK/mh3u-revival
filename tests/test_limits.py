@@ -101,6 +101,34 @@ def test_room_capacity_ceiling():
     print("  F4 room ceiling (not declared max): OK")
 
 
+def test_password_room_policy():
+    old_enabled = mh.DESTROY_PASSWORD_ROOMS
+    mh.DESTROY_PASSWORD_ROOMS = True
+    try:
+        reg = mh.GatheringRegistry()
+        normal = reg.create(_session(), host_pid=10)
+        assert normal.gid in reg.sessions
+
+        locked = _session()
+        locked.user_password = "1234"
+        removed = reg.create(locked, host_pid=20)
+        assert removed.gid not in reg.sessions
+        assert reg.password_rooms_destroyed == 1
+
+        normal.gathering.user_password_enabled = True
+        assert reg.reap_password_rooms() == [normal.gid]
+        assert not reg.sessions
+        assert reg.password_rooms_destroyed == 2
+
+        browse_room = _session()
+        browse_room.user_password = "browse-secret"
+        browse = reg.create(browse_room, host_pid=30)
+        assert browse.gid not in reg.sessions
+    finally:
+        mh.DESTROY_PASSWORD_ROOMS = old_enabled
+    print("  password-room auto-destroy: OK")
+
+
 # --- F3: destroy ownership -----------------------------------------------------------
 def test_destroy_ownership():
     reg = mh.GatheringRegistry()
@@ -283,6 +311,7 @@ def test_bound_list():
 def main():
     test_room_cap()
     test_room_capacity_ceiling()
+    test_password_room_policy()
     test_destroy_ownership()
     asyncio.run(test_unregister_handler_ownership())
     test_community_cap_and_reap()

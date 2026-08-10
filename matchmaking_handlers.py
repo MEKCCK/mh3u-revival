@@ -33,6 +33,59 @@ import limits
 logger = logging.getLogger("mh3u.matchmaking")
 
 
+def _bool_env(name, default=True):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+DESTROY_PASSWORD_ROOMS = _bool_env("MH3U_DESTROY_PASSWORD_ROOMS", True)
+PASSWORD_ROOM_SCAN_SECONDS = limits._int_env("MH3U_PASSWORD_ROOM_SCAN_SECONDS", 5)
+
+
+def _int_set_env(name, default=""):
+    values = set()
+    for raw in os.environ.get(name, default).split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            values.add(int(raw, 0))
+        except ValueError:
+            logger.warning("ignoring invalid %s value %r", name, raw)
+    return values
+
+
+PASSWORD_POLICY_VALUES = _int_set_env("MH3U_PASSWORD_POLICY_VALUES", "2")
+try:
+    PASSWORD_FLAG_MASK = int(os.environ.get("MH3U_PASSWORD_FLAG_MASK", "0"), 0)
+except ValueError:
+    PASSWORD_FLAG_MASK = 0
+    logger.warning("invalid MH3U_PASSWORD_FLAG_MASK; flag-based detection disabled")
+
+
+def password_room_reason(gathering):
+    """Return the explicit lock signal carried by a MatchmakeSession, if any."""
+    if not DESTROY_PASSWORD_ROOMS or gathering is None:
+        return None
+    for name in ("user_password_enabled", "system_password_enabled"):
+        if bool(getattr(gathering, name, False)):
+            return name
+    for name in ("user_password", "system_password", "codeword", "password"):
+        value = getattr(gathering, name, "")
+        if value is not None and str(value).strip():
+            return "%s is set" % name
+    policy = getattr(gathering, "participation_policy", None)
+    argument = getattr(gathering, "policy_argument", 0) or 0
+    if policy in PASSWORD_POLICY_VALUES and argument:
+        return "participation_policy=%s policy_argument=%s" % (policy, argument)
+    flags = getattr(gathering, "flags", 0) or 0
+    if PASSWORD_FLAG_MASK and flags & PASSWORD_FLAG_MASK:
+        return "flags=0x%x mask=0x%x" % (flags, PASSWORD_FLAG_MASK)
+    return None
+
+
 async def _prefree_host_slot(pid):
     """LEGACY (needs MH3U_HOST_FREE=1): before admitting a (re)joiner, poke away any STALE slot
     it still occupies in the co-located host Cemu's roster. Superseded 2026-07-02 by the
@@ -82,6 +135,23 @@ class GatheringRegistry:
     def __init__(self):
         self._next_gid = 0x1000
         self.sessions = {}                   # gid -> _Session
+        self.password_rooms_destroyed = 0
+
+    def reap_password_rooms(self):
+        if not DESTROY_PASSWORD_ROOMS:
+            return []
+        gone = []
+        for gid, sess in list(self.sessions.items()):
+            reason = password_room_reason(sess.gathering)
+            if reason is None:
+                continue
+            del self.sessions[gid]
+            self.password_rooms_destroyed += 1
+            gone.append(gid)
+            logger.warning(
+                "password-room policy: destroyed gid=0x%x host=%s reason=%s",
+                gid, sess.host_pid, reason)
+        return gone
 
     def create(self, gathering, host_pid):
         # Global room cap — stops a PID-cycling attacker growing sessions without bound.
@@ -97,9 +167,11 @@ class GatheringRegistry:
         gathering.num_participants = 1
         sess = _Session(gid, gathering, host_pid, secrets.token_bytes(32))
         self.sessions[gid] = sess
+        self.reap_password_rooms()
         return sess
 
     def browse(self, criteria):
+        self.reap_password_rooms()
         out = []
         for s in self.sessions.values():
             g = s.gathering
@@ -203,6 +275,18 @@ class GatheringRegistry:
 REGISTRY = GatheringRegistry()
 
 
+async def password_room_reaper_task(interval=PASSWORD_ROOM_SCAN_SECONDS):
+    """Continuously remove sessions that acquire a password after creation."""
+    interval = max(1, int(interval))
+    logger.info(
+        "password-room policy %s: scan every %ds; policy-values=%s flag-mask=0x%x",
+        "ON" if DESTROY_PASSWORD_ROOMS else "OFF", interval,
+        sorted(PASSWORD_POLICY_VALUES), PASSWORD_FLAG_MASK)
+    while True:
+        await asyncio.sleep(interval)
+        REGISTRY.reap_password_rooms()
+
+
 # Two independent caps, decoupled 2026-07-03 (were one overloaded MAX_PLAYERS=4):
 #   ROOM_MAX  — hunters in a single HUNT room. This is the game's own P2P limit (4); it is NOT
 #               raisable server-side (the clients mesh P2P + the quest/slot logic lives in the
@@ -212,9 +296,9 @@ REGISTRY = GatheringRegistry()
 #               so this IS server-tunable. The hall/lobby LIST screens render the displayed max as
 #               (max_participants - offset) (world offset 2, lobby offset 1); a raw max of 100
 #               rendered as 98/99, so the game validates large halls fine.
-# Both env-tunable; defaults keep hunts at the proven 4 and open halls to 16.
+# Both env-tunable; defaults keep hunts at the proven 4 and open halls to 32.
 ROOM_MAX = limits._int_env("MH3U_ROOM_MAX", 4)
-HALL_MAX = limits._int_env("MH3U_HALL_MAX", 16)
+HALL_MAX = limits._int_env("MH3U_HALL_MAX", 32)
 
 # Number of official Worlds (gathering halls) to advertise. Rooms are global (not tied to a
 # hall), so multiple worlds all route to the same global room pool. One world + its one lobby
@@ -547,6 +631,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
     async def browse_matchmake_session(self, client, search_criteria, range):
         # Return ALL live rooms regardless of criteria for now (MH3U's search-criteria
         # semantics not mapped yet) so the joiner reliably sees the host's room.
+        REGISTRY.reap_password_rooms()
         results = [s.gathering for s in REGISTRY.sessions.values()]
         logger.debug("browse: %d live room(s) gids=%s (pid=%s)",
                     len(results), [hex(g.id) for g in results], _pid(client))
@@ -591,6 +676,7 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         s = REGISTRY.sessions.get(gid)
         if s:
             s.gathering.flags = getattr(s.gathering, "flags", 0)
+        REGISTRY.reap_password_rooms()
         logger.info("open_participation: gid=0x%x (pid=%s) -> ok", gid, _pid(client))
         return None
 
@@ -598,8 +684,33 @@ class MatchmakeExtensionServer(matchmaking.MatchmakeExtensionServer):
         logger.info("close_participation: gid=0x%x (pid=%s) -> ok", gid, _pid(client))
         return None
 
-    async def update_application_buffer(self, *args):
-        # MH3U sets per-session app data; accept + ignore for now.
+    async def update_application_buffer(self, client, gid, buffer):
+        # Preserve the latest app data and re-check the room. Only the host may
+        # mutate its session, otherwise a guest could forge an update to close it.
+        s = REGISTRY.sessions.get(gid)
+        if s is not None and s.host_pid == _pid(client):
+            s.gathering.application_data = bytes(buffer or b"")
+            REGISTRY.reap_password_rooms()
+        elif s is not None:
+            logger.warning("update_application_buffer: DENY gid=0x%x pid=%s (not host)",
+                           gid, _pid(client))
+        return None
+
+    async def update_matchmake_session(self, client, gathering):
+        gid = getattr(gathering, "id", 0)
+        s = REGISTRY.sessions.get(gid)
+        if s is None:
+            return None
+        if s.host_pid != _pid(client):
+            logger.warning("update_matchmake_session: DENY gid=0x%x pid=%s (not host)",
+                           gid, _pid(client))
+            return None
+        gathering.owner = s.host_pid
+        gathering.host = s.host_pid
+        gathering.num_participants = len(s.participants)
+        gathering.session_key = s.key
+        s.gathering = gathering
+        REGISTRY.reap_password_rooms()
         return None
 
     # --- friend / notification stubs (no friends backend) ------------------
