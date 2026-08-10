@@ -790,11 +790,15 @@ def _selftest():
         persisted = (tmp / "client.log").read_text(encoding="utf-8").splitlines()
         check(len(persisted) == 2 and any("warn x" in l for l in persisted),
               "lines persisted to client.log")
+        # rotation test on a SEPARATE file (a second open handle on the same
+        # file would block the rename on Windows — WinError 32)
+        os.environ["MH3U_LOG_FILE"] = str(tmp / "client2.log")
         cl2 = clientlog.ClientLog(max_mb=0.001, backups=1)
         for i in range(80):
             cl2.info("rotation-filler-line-%03d-abcdefghijklmnopqrst" % i)
         names = os.listdir(tmp)
-        check(any(n.startswith("client.log.1") for n in names), "rotation produced client.log.1")
+        check(any(n.startswith("client2.log.1") for n in names),
+              "rotation produced client2.log.1")
     finally:
         if old_file is None:
             os.environ.pop("MH3U_LOG_FILE", None)

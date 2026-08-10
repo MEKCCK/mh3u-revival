@@ -6,6 +6,11 @@ rotating file next to the launcher, and can be streamed to registered
 listeners (the GUI log panes). Thread-safe: the launcher logs from the GUI
 thread, worker threads, the server-log reader and the easytier pump.
 
+Rotation is manual (close -> rename chain -> reopen) instead of the logging
+module's RotatingFileHandler, because that renames the file while it is still
+open — legal on POSIX, but Windows refuses with WinError 32. This is the
+launcher's own writer, so it controls the only handle and can close first.
+
 The env knobs mirror the server's logging exactly, so a host can point both
 sides at the same naming convention:
   MH3U_LOG_FILE      filename or absolute path; "" disables the file
@@ -23,8 +28,6 @@ import os
 import sys
 import time
 import threading
-import logging
-from logging.handlers import RotatingFileHandler
 
 
 def _log_dir():
@@ -40,7 +43,8 @@ class ClientLog:
     def __init__(self, max_mb=None, backups=None):
         self._lock = threading.Lock()
         self._listeners = []
-        self._handler = None
+        self._file = None
+        self._path = None
 
         if max_mb is None:
             try:
@@ -52,33 +56,59 @@ class ClientLog:
                 backups = int(os.environ.get("MH3U_LOG_BACKUPS", "3"))
             except (TypeError, ValueError):
                 backups = 3
+        self._max_bytes = int(max_mb * 1024 * 1024)
+        self._backups = max(1, backups)
 
         log_name = os.environ.get("MH3U_LOG_FILE", "client.log")
         if log_name:
-            path = log_name if os.path.isabs(log_name) else os.path.join(_log_dir(), log_name)
+            self._path = (log_name if os.path.isabs(log_name)
+                          else os.path.join(_log_dir(), log_name))
             try:
-                handler = RotatingFileHandler(
-                    path, maxBytes=int(max_mb * 1024 * 1024),
-                    backupCount=backups, encoding="utf-8")
-                # The line already carries timestamp + level.
-                handler.setFormatter(logging.Formatter("%(message)s"))
-                self._handler = handler
+                self._file = open(self._path, "a", encoding="utf-8")
             except OSError as e:
                 print("WARNING: could not open client log %r (%s) - console only"
-                      % (path, e), file=sys.stderr)
+                      % (self._path, e), file=sys.stderr)
+                self._path = None
+                self._file = None
 
     # -- plumbing -----------------------------------------------------------
     def _fmt(self, level, msg):
         return "%s %-7s %s" % (time.strftime("%H:%M:%S"), level, msg)
 
+    def _rotate(self):
+        """Windows-safe rotation: close the handle first, shift the chain
+        (file -> .1 -> .2 ...), then reopen fresh."""
+        try:
+            if self._file is not None:
+                self._file.close()
+        except Exception:
+            pass
+        base = self._path
+        try:
+            for i in range(self._backups - 1, 0, -1):
+                src, dst = "%s.%d" % (base, i), "%s.%d" % (base, i + 1)
+                try:
+                    os.replace(src, dst)
+                except OSError:
+                    pass
+            os.replace(base, base + ".1")
+        except OSError:
+            pass
+        try:
+            self._file = open(base, "a", encoding="utf-8")
+        except OSError:
+            self._path = None
+            self._file = None
+
     def _emit(self, level, msg):
         line = self._fmt(level, msg)
         with self._lock:
-            if self._handler is not None:
+            if self._file is not None:
                 try:
-                    rec = logging.LogRecord(
-                        "mh3u.launcher", logging.INFO, "", 0, line, None, None)
-                    self._handler.emit(rec)
+                    self._file.write(line + "\n")
+                    self._file.flush()
+                    if self._file.tell() > self._max_bytes:
+                        self._rotate()
                 except Exception:
                     pass
             for cb in list(self._listeners):
