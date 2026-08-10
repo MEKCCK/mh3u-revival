@@ -313,6 +313,82 @@ async def _event_watcher():
             prev_players, prev_rooms, prev_ports = now_players, now_rooms, now_ports
         except Exception:
             pass
+# ---------------------------------------------------------------------------
+# Server resource metrics (/api/system) — /proc-based, zero deps, POSIX only
+# ---------------------------------------------------------------------------
+
+_sys_last = {}
+
+
+def _read_mem():
+    try:
+        d = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, _, v = line.partition(":")
+                d[k.strip()] = int(v.split()[0]) * 1024
+        total = d.get("MemTotal", 0)
+        avail = d.get("MemAvailable", 0)
+        return {"used": total - avail, "total": total} if total else None
+    except Exception:
+        return None
+
+
+def _read_cpu():
+    try:
+        with open("/proc/stat") as f:
+            nums = [int(x) for x in f.readline().split()[1:]]
+        idle = nums[3] + (nums[4] if len(nums) > 4 else 0)   # idle + iowait
+        return {"idle": idle, "total": sum(nums)}
+    except Exception:
+        return None
+
+
+def _read_net():
+    try:
+        rx = tx = 0
+        with open("/proc/net/dev") as f:
+            next(f)
+            next(f)
+            for line in f:
+                p = line.split()
+                if len(p) >= 10:
+                    rx += int(p[1])
+                    tx += int(p[9])
+        return {"rx": rx, "tx": tx}
+    except Exception:
+        return None
+
+
+def snapshot_system(full=True):
+    """CPU% / memory / network rates, sampled as deltas between requests
+    (the panel polls every 3s). None fields on non-POSIX hosts."""
+    out = {"memory": None, "cpu_percent": None,
+           "net_rx_bps": None, "net_tx_bps": None}
+    mem = _read_mem()
+    cpu = _read_cpu()
+    net = _read_net()
+    if mem:
+        out["memory"] = mem
+    now = time.monotonic()
+    last = _sys_last
+    if cpu and net and last:
+        dt = now - last.get("t", now)
+        if dt >= 0.5:
+            dt_cpu = cpu["total"] - last.get("cpu_total", cpu["total"])
+            if dt_cpu > 0:
+                out["cpu_percent"] = round(
+                    100.0 * (1 - (cpu["idle"] - last.get("cpu_idle", cpu["idle"])) / dt_cpu), 1)
+            out["net_rx_bps"] = int(max(0, net["rx"] - last.get("net_rx", net["rx"])) / dt)
+            out["net_tx_bps"] = int(max(0, net["tx"] - last.get("net_tx", net["tx"])) / dt)
+    _sys_last.update({"t": now,
+                      "cpu_idle": cpu["idle"] if cpu else 0,
+                      "cpu_total": cpu["total"] if cpu else 0,
+                      "net_rx": net["rx"] if net else 0,
+                      "net_tx": net["tx"] if net else 0})
+    return out
+
+
 _ROUTES = {
     "/api/status": ("status", snapshot_status),
     "/api/players": ("players", snapshot_players),
@@ -320,6 +396,7 @@ _ROUTES = {
     "/api/halls": ("halls", snapshot_halls),
     "/api/stats": ("stats", snapshot_stats),
     "/api/events": ("events", snapshot_events),
+    "/api/system": ("system", snapshot_system),
 }
 
 # The built-in webui panel (self-contained HTML, zero external deps).
