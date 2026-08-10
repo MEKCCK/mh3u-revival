@@ -58,6 +58,7 @@ class ClientLog:
         self._path = None
         self._notice_stop = threading.Event()
         self._notice_thread = None
+        self._latest_notice_line = None
         self._recent = {}
         self._recent_cleanup = 0.0
 
@@ -180,12 +181,14 @@ class ClientLog:
         if interval <= 0:
             raise ValueError("periodic notice interval must be positive")
 
-        self.info(message)
+        self._latest_notice_line = self.info(message)
 
         def run():
             deadline = time.monotonic() + interval
             while not self._notice_stop.wait(max(0.0, deadline - time.monotonic())):
-                self.info(message)
+                line = self.info(message)
+                if line is not None:
+                    self._latest_notice_line = line
                 deadline += interval
                 if deadline <= time.monotonic():
                     deadline = time.monotonic() + interval
@@ -194,6 +197,10 @@ class ClientLog:
         self._notice_thread = threading.Thread(
             target=run, name="mh3u-hourly-notice", daemon=True)
         self._notice_thread.start()
+
+    def latest_notice_line(self):
+        """Return the already-persisted notice for initial GUI display."""
+        return self._latest_notice_line
 
     def close(self):
         """Stop the notice timer and close the current log file."""

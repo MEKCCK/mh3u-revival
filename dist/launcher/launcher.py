@@ -985,6 +985,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     join_play.pack(anchor="w", pady=10)
     join_log = scrolledtext.ScrolledText(join, height=12, wrap="word", state="disabled")
     join_log.pack(fill="both", expand=True)
+    startup_notice = clog.latest_notice_line()
+    if startup_notice:
+        join_log.configure(state="normal")
+        join_log.insert("end", startup_notice + "\n")
+        join_log.configure(state="disabled")
 
     # ---- unified auto-mesh (no codes — the server address IS the key) ----
     meshrow = ttk.Frame(join)
@@ -1229,6 +1234,10 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         host_log = scrolledtext.ScrolledText(host, height=12, wrap="word", state="disabled")
         host_log.pack(fill="both", expand=True, pady=(8, 0))
+        if startup_notice:
+            host_log.configure(state="normal")
+            host_log.insert("end", startup_notice + "\n")
+            host_log.configure(state="disabled")
 
         proc_holder = {"proc": None, "reader": None}
 

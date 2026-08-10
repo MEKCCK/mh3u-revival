@@ -46,6 +46,7 @@ class ClientNoticeTests(unittest.TestCase):
                 log.start_periodic_notice("timer-fired", interval=0.02)
                 first = (Path(tmp) / "client.log").read_text(encoding="utf-8")
                 self.assertEqual(first.count("timer-fired"), 1)
+                self.assertIn("timer-fired", log.latest_notice_line())
                 time.sleep(0.06)
                 log.close()
                 text = (Path(tmp) / "client.log").read_text(encoding="utf-8")
