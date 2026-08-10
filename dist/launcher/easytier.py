@@ -633,9 +633,15 @@ class EasyTierNet:
         return True, "easytier started"
 
     def _pump(self):
+        verbose = os.environ.get("MH3U_EASYTIER_VERBOSE") == "1"
         try:
             for line in iter(self._proc.stdout.readline, ""):
-                if line.strip():
+                # The launcher verifies mesh health through easytier-cli. Raw core
+                # output is mostly per-second DNS/UPnP/hole-punch retries whose
+                # timestamps and ports defeat ordinary duplicate suppression.
+                # Drain it to keep the subprocess responsive, but do not persist
+                # it unless an operator explicitly enables verbose diagnostics.
+                if verbose and line.strip():
                     self.log("[easytier] %s" % line.rstrip("\n"))
         except Exception:
             pass

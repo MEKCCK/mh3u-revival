@@ -25,14 +25,20 @@ Usage:
   clog.add_listener(cb)                   # cb(formatted_line)
 """
 import os
+import re
 import sys
 import time
 import threading
 
 
-HOURLY_NOTICE = "ORG 的小偷与土皇帝不得入内。"
+HOURLY_NOTICE = "怪物猎人通讯部的小偷与土皇帝不得入内。"
 HOURLY_NOTICE_SECONDS = 60.0 * 60.0
 REPEAT_SUPPRESSION_SECONDS = 60.0
+
+_FORWARDED_PREFIX = re.compile(
+    r"^(?:\[server\]\s*)?(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?"
+    r"(?:Z|[+-]\d{2}:\d{2})?\s+)?(?:INFO|WARNING|WARN|ERROR|DEBUG)\s+(?:[^:]+:\s*)?"
+)
 
 
 def _log_dir():
@@ -52,6 +58,7 @@ class ClientLog:
         self._path = None
         self._notice_stop = threading.Event()
         self._notice_thread = None
+        self._latest_notice_line = None
         self._recent = {}
         self._recent_cleanup = 0.0
 
@@ -112,7 +119,9 @@ class ClientLog:
     def _emit(self, level, msg):
         now = time.monotonic()
         with self._lock:
-            key = (level, msg)
+            # Forwarded server/tool lines carry their own changing timestamps.
+            # Ignore that envelope so the same payload is still recognized.
+            key = (level, _FORWARDED_PREFIX.sub("", msg, count=1))
             previous = self._recent.get(key)
             if (previous is not None
                     and now - previous < REPEAT_SUPPRESSION_SECONDS):
@@ -165,17 +174,21 @@ class ClientLog:
 
     def start_periodic_notice(self, message=HOURLY_NOTICE,
                               interval=HOURLY_NOTICE_SECONDS):
-        """Emit a notice every elapsed interval, starting at logger creation."""
+        """Emit once now, then once per elapsed interval."""
         if self._notice_thread is not None and self._notice_thread.is_alive():
             return
         interval = float(interval)
         if interval <= 0:
             raise ValueError("periodic notice interval must be positive")
 
+        self._latest_notice_line = self.info(message)
+
         def run():
             deadline = time.monotonic() + interval
             while not self._notice_stop.wait(max(0.0, deadline - time.monotonic())):
-                self.info(message)
+                line = self.info(message)
+                if line is not None:
+                    self._latest_notice_line = line
                 deadline += interval
                 if deadline <= time.monotonic():
                     deadline = time.monotonic() + interval
@@ -184,6 +197,10 @@ class ClientLog:
         self._notice_thread = threading.Thread(
             target=run, name="mh3u-hourly-notice", daemon=True)
         self._notice_thread.start()
+
+    def latest_notice_line(self):
+        """Return the already-persisted notice for initial GUI display."""
+        return self._latest_notice_line
 
     def close(self):
         """Stop the notice timer and close the current log file."""
