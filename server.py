@@ -26,6 +26,7 @@ sys.path.insert(0, _HERE)
 import asyncio
 import concurrent.futures
 import contextlib
+import time
 import aioconsole
 
 from nintendo.nex import rmc, authentication, common, settings
@@ -37,6 +38,7 @@ import reaper
 import limits
 import natcheck
 import api
+from logfilter import SuppressRepeated
 
 def _log_dir():
     # Frozen (PyInstaller onefile): sys.executable is the real .exe path (the bundle
@@ -84,8 +86,13 @@ def _build_log_handlers():
 
 
 _log_handlers, _log_path = _build_log_handlers()
+for _handler in _log_handlers:
+    _handler.addFilter(SuppressRepeated())
 logging.basicConfig(level=logging.INFO, handlers=_log_handlers)
 logger = logging.getLogger("mh3u.server")
+HOURLY_NOTICE = "ORG 的小偷与土皇帝不得入内。"
+HOURLY_NOTICE_SECONDS = 60.0 * 60.0
+_PROCESS_STARTED_MONOTONIC = time.monotonic()
 if _log_path:
     logger.info("logging to %s (rotating: %s MB x %s backups)", _log_path,
                 os.environ.get("MH3U_LOG_MAX_MB", "5"), os.environ.get("MH3U_LOG_BACKUPS", "5"))
@@ -106,6 +113,24 @@ _AUTH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_pr
 if os.environ.get("MH3U_PKT_LOG") != "1":
     for _noisy in ("nintendo.nex.prudp", "nintendo.nex.rmc"):
         logging.getLogger(_noisy).setLevel(logging.ERROR)
+    for _noisy in ("nintendo.nex", "mh3u.proto", "mh3u.natcheck"):
+        logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+
+async def hourly_notice_task(interval=HOURLY_NOTICE_SECONDS):
+    """Log once per elapsed interval, unaffected by wall-clock adjustments."""
+    interval = float(interval)
+    if interval <= 0:
+        raise ValueError("hourly notice interval must be positive")
+    now = time.monotonic()
+    completed_intervals = int((now - _PROCESS_STARTED_MONOTONIC) // interval)
+    deadline = _PROCESS_STARTED_MONOTONIC + (completed_intervals + 1) * interval
+    while True:
+        await asyncio.sleep(max(0.0, deadline - time.monotonic()))
+        logger.info(HOURLY_NOTICE)
+        deadline += interval
+        if deadline <= time.monotonic():
+            deadline = time.monotonic() + interval
 
 
 def build_settings():
@@ -328,6 +353,7 @@ async def main():
         await natcheck.start(config.HOST)
         _supervise(protocols.notify_trigger_watcher, "notify-watcher")
         _supervise(reaper.reaper_task, "reaper", respawn=True)
+        _supervise(hourly_notice_task, "hourly-notice", respawn=True)
         try:
             await aioconsole.ainput("")
         except (EOFError, RuntimeError):

@@ -45,6 +45,7 @@ import collections
 
 import config
 import limits
+from logfilter import SuppressRepeated
 
 logger = logging.getLogger("mh3u.api")
 
@@ -66,6 +67,7 @@ class _RingHandler(logging.Handler):
         super().__init__(level=logging.INFO)
         self._buf = collections.deque(maxlen=cap)
         self._lock = threading.Lock()
+        self.addFilter(SuppressRepeated())
         self.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S"))
 

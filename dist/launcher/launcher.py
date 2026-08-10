@@ -46,7 +46,7 @@ clog = clientlog.get_logger()
 # ---------------------------------------------------------------------------
 # Constants shared with the .bats / bundle layout
 # ---------------------------------------------------------------------------
-APP_TITLE = "MH3U Revival"
+APP_TITLE = "MH3U Revival 联机启动器"
 GITHUB_REPO = "Matt-Wood-23/mh3u-revival"
 RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases"
@@ -916,13 +916,13 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
     ROOT_DIR = bundle_root()
 
-    clog.info("== MH3U Revival launcher starting ==")
-    clog.info("bundle: %s | python %s | %s%s",
+    clog.info("== MH3U Revival 联机启动器正在启动 ==")
+    clog.info("程序目录：%s | Python %s | %s%s",
               ROOT_DIR, sys.version.split()[0], sys.platform,
               " (frozen)" if getattr(sys, "frozen", False) else "")
-    clog.info("easytier: version=%s runtime=%s",
+    clog.info("EasyTier：版本=%s 运行库=%s",
               easytier.EASYTIER_VERSION,
-              "present" if easytier.binaries_present(ROOT_DIR) else "missing (downloaded on first use)")
+              "已安装" if easytier.binaries_present(ROOT_DIR) else "缺失（首次使用时下载）")
 
     app = tk.Tk()
     app.title(APP_TITLE)
@@ -940,14 +940,14 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     top.pack(fill="x")
     ttk.Label(top, text=APP_TITLE, font=("Segoe UI", 16, "bold")).pack(side="left")
     local_ver = read_version(ROOT_DIR)
-    ver_var = tk.StringVar(value=f"version {local_ver}")
+    ver_var = tk.StringVar(value=f"版本 {local_ver}")
     ttk.Label(top, textvariable=ver_var).pack(side="right")
 
     update_bar = ttk.Frame(app, padding=(12, 0))
-    update_var = tk.StringVar(value="checking for updates…")
+    update_var = tk.StringVar(value="正在检查更新…")
     update_lbl = ttk.Label(update_bar, textvariable=update_var, foreground="#555")
     update_lbl.pack(side="left")
-    update_btn = ttk.Button(update_bar, text="Update now")
+    update_btn = ttk.Button(update_bar, text="立即更新")
     # packed later only if an update exists
     update_bar.pack(fill="x")
 
@@ -957,31 +957,31 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
     # ---------------- HOME ----------------
     home = ttk.Frame(nb, padding=20)
-    nb.add(home, text="Home")
-    ttk.Label(home, text="What do you want to do?",
+    nb.add(home, text="主页")
+    ttk.Label(home, text="请选择操作：",
               font=("Segoe UI", 12)).pack(pady=(10, 20))
-    btn_join = ttk.Button(home, text="JOIN A GAME", width=28,
+    btn_join = ttk.Button(home, text="加入游戏", width=28,
                           command=lambda: nb.select(join))
     btn_join.pack(pady=6, ipady=8)
-    btn_host = ttk.Button(home, text="HOST A SERVER", width=28,
+    btn_host = ttk.Button(home, text="创建服务器", width=28,
                           command=lambda: nb.select(host))
     btn_host.pack(pady=6, ipady=8)
-    ttk.Label(home, text="JOIN = play on a friend's server.\n"
-                         "HOST = run the server for your friends.",
+    ttk.Label(home, text="加入游戏：连接到朋友的服务器。\n"
+                         "创建服务器：启动供朋友加入的服务器。",
               foreground="#555", justify="center").pack(pady=20)
 
     # ---------------- JOIN ----------------
     join = ttk.Frame(nb, padding=16)
-    nb.add(join, text="Join")
-    ttk.Label(join, text="Host's IP address", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-    ttk.Label(join, text="Ask the host — their Tailscale (100.x), Radmin (26.x), "
-                         "LAN or public IP.", foreground="#555").pack(anchor="w", pady=(0, 6))
+    nb.add(join, text="加入")
+    ttk.Label(join, text="服务器地址", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+    ttk.Label(join, text="请输入主机分享的局域网、虚拟网或公网地址。",
+              foreground="#555").pack(anchor="w", pady=(0, 6))
     ip_var = tk.StringVar(value=read_join_seed(
         os.path.join(ROOT_DIR, MESH_SEED_REL),
         os.path.join(ROOT_DIR, SRVFILE_REL)))
     ip_entry = ttk.Entry(join, textvariable=ip_var, width=40)
     ip_entry.pack(anchor="w")
-    join_play = ttk.Button(join, text="Save + Play")
+    join_play = ttk.Button(join, text="保存并启动")
     join_play.pack(anchor="w", pady=10)
     join_log = scrolledtext.ScrolledText(join, height=12, wrap="word", state="disabled")
     join_log.pack(fill="both", expand=True)
@@ -990,16 +990,16 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     meshrow = ttk.Frame(join)
     meshrow.pack(anchor="w", pady=(0, 8))
     mesh_status_var = tk.StringVar(
-        value="auto-mesh: if the host's server has one, we join it automatically")
+        value="虚拟网络：检测到服务器网络后自动加入")
     ttk.Label(meshrow, textvariable=mesh_status_var, foreground="#555").pack(side="left")
-    room_stop_btn = ttk.Button(meshrow, text="Stop mesh", state="disabled")
+    room_stop_btn = ttk.Button(meshrow, text="停止虚拟网络", state="disabled")
     room_stop_btn.pack(side="left", padx=8)
 
     def _wait_elevated_handoff(log):
         """After relaunching elevated, poll for the elevated window's handoff
         marker. True = the new window took over (abort our flow); False = the
         prompt was declined / nothing took over (fall back to direct)."""
-        log("[mesh] waiting for the elevated window to take over ...")
+        log("[虚拟网络] 正在等待管理员权限窗口接管…")
         t0 = time.monotonic()
         while time.monotonic() - t0 < 10.0:
             if os.path.exists(os.path.join(ROOT_DIR, ELEVATED_FLAG)):
@@ -1009,6 +1009,8 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
     def jlog(line):
         fmt = clog.info(line)   # timestamped + leveled (also persisted)
+        if fmt is None:
+            return
         join_log.configure(state="normal")
         join_log.insert("end", fmt + "\n")
         join_log.see("end")
@@ -1017,7 +1019,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
     def do_join():
         ip = ip_var.get().strip()
         if not ip:
-            jlog("[Join] Enter the host's IP first.")
+            jlog("[加入] 请先输入服务器地址。")
             return
         if is_mesh_virtual_address(ip):
             jlog("[Join] 10.126.126.x is an internal mesh address, not the server "
@@ -1057,9 +1059,9 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             ok, msg = ensure_mesh_binaries(log)
             if not ok:
                 if ALLOW_DIRECT:
-                    log("[mesh] %s — direct mode explicitly enabled for %s" % (msg, ip))
+                    log("[虚拟网络] %s，已启用直接连接模式：%s" % (msg, ip))
                     return ip
-                log("[mesh] %s — play stopped; room networking requires the mesh" % msg)
+                log("[虚拟网络] %s，房间网络未就绪，已停止启动游戏" % msg)
                 return None
         if not maybe_elevate(log, "join"):
             # A UAC relaunch was triggered. If the prompt is accepted, the
@@ -1069,12 +1071,12 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             if _wait_elevated_handoff(log):
                 return None
             if ALLOW_DIRECT:
-                log("[mesh] no admin rights — direct mode explicitly enabled for %s" % ip)
+                log("[虚拟网络] 未取得管理员权限，已启用直接连接模式：%s" % ip)
                 return ip
-            log("[mesh] no admin rights (UAC declined?) — play stopped; accept UAC and retry")
+            log("[虚拟网络] 未取得管理员权限，已停止启动游戏；请接受 UAC 后重试")
             return None
         name, secret = easytier.mesh_identity(ip)
-        log("[mesh] joining %s's unified mesh ..." % ip)
+        log("[虚拟网络] 正在加入 %s 的统一房间网络…" % ip)
         net = easytier.EasyTierNet(ROOT_DIR, log=log)
         # The server's mesh node is the network anchor: connect to it DIRECTLY
         # (its LAN listener, reachable whenever the server address is) in
@@ -1086,9 +1088,9 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             extra_peers=["tcp://%s:%d" % (ip, easytier.LAN_TCP_PORT)])
         if not ok:
             if ALLOW_DIRECT:
-                log("[mesh] %s — direct mode explicitly enabled for %s" % (msg, ip))
+                log("[虚拟网络] %s，已启用直接连接模式：%s" % (msg, ip))
                 return ip
-            log("[mesh] %s — play stopped; no public fallback" % msg)
+            log("[虚拟网络] %s，未启用公网回退，已停止启动游戏" % msg)
             return None
         nets.append(net)
         app.after(0, lambda: room_stop_btn.configure(state="normal"))
@@ -1099,12 +1101,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
         vip = net.wait_for_server(45, log=log)
         if not vip:
             if ALLOW_DIRECT:
-                log("[mesh] server mesh unavailable — direct mode explicitly enabled for %s" % ip)
+                log("[虚拟网络] 服务器网络不可用，已启用直接连接模式：%s" % ip)
                 return ip
-            log("[mesh] server mesh unavailable — play stopped; close stale EasyTier "
-                "processes and retry")
+            log("[虚拟网络] 服务器网络不可用，已停止启动游戏；请关闭残留的 EasyTier 进程后重试")
             return None
-        log("[mesh] joined the unified room mesh — server is at %s" % vip)
+        log("[虚拟网络] 已加入统一房间网络，服务器地址为 %s" % vip)
         return vip
 
     def stop_mesh():
@@ -1117,13 +1118,14 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
         for net in stopped:
             nets.remove(net)
         app.after(0, lambda: (room_stop_btn.configure(state="disabled"),
-                              mesh_status_var.set("auto-mesh: off (manual direct connect)"),
-                              jlog("[mesh] stopped.") if stopped else jlog("[mesh] no active mesh.")))
+                              mesh_status_var.set("虚拟网络：已关闭（直接连接）"),
+                              jlog("[虚拟网络] 已停止。") if stopped
+                              else jlog("[虚拟网络] 当前没有活动连接。")))
 
     def ensure_mesh_binaries(log):
         if easytier.binaries_present(ROOT_DIR):
             return True, ""
-        log("[mesh] EasyTier runtime not found — downloading once (~15 MB)...")
+        log("[虚拟网络] 未找到 EasyTier 运行库，正在下载（约 15 MB）…")
         ok, msg = easytier.ensure_binaries(ROOT_DIR, log=log)
         if not ok:
             log("[mesh] " + msg)
@@ -1161,35 +1163,32 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
     # ---------------- HOST ----------------
     host = ttk.Frame(nb, padding=16)
-    nb.add(host, text="Host")
+    nb.add(host, text="服务器")
 
     server_kind = server_available(ROOT_DIR)
     if server_kind is None:
-        ttk.Label(host, text="server.exe is missing from this folder.",
+        ttk.Label(host, text="当前文件夹缺少 server.exe。",
                   font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(4, 2))
-        ttk.Label(host, text="The all-in-one bundle ships server.exe next to this "
-                             "launcher.\nIf it's gone (antivirus quarantine or a partial "
-                             "unzip), re-download\nthe latest bundle from Releases and "
-                             "extract it fully.", foreground="#555",
+        ttk.Label(host, text="完整联机包应在启动器旁包含 server.exe。\n"
+                             "若文件被安全软件隔离或压缩包未完整解压，请重新下载最新版并完整解压。",
+                  foreground="#555",
                   justify="left").pack(anchor="w")
         def open_releases():
             try:
                 os.startfile(RELEASES_PAGE)  # noqa
             except Exception:
                 pass
-        ttk.Button(host, text="Open Releases page", command=open_releases).pack(anchor="w", pady=8)
+        ttk.Button(host, text="打开发布页面", command=open_releases).pack(anchor="w", pady=8)
     else:
         # ---- unified mesh (auto, server-side — no codes, no VPN to install) ----
         mesh = {"net": None}
-        mesh_frame = ttk.LabelFrame(host, text="Unified room mesh — automatic private network",
+        mesh_frame = ttk.LabelFrame(host, text="统一房间虚拟网络（自动私有网络）",
                                     padding=8)
         mesh_frame.pack(fill="x", pady=(0, 8))
         ttk.Label(mesh_frame,
-                  text="Starting the server also starts a private mesh that every "
-                       "joiner joins automatically — one unified room, no VPN app, "
-                       "no codes. Public nodes only relay when hole-punching fails.",
+                  text="启动服务器会同时建立虚拟网络，加入者会自动进入同一房间网络。",
                   foreground="#555", wraplength=560, justify="left").pack(anchor="w")
-        mesh_var = tk.StringVar(value="mesh: starts with the server")
+        mesh_var = tk.StringVar(value="虚拟网络：随服务器启动")
         ttk.Label(mesh_frame, textvariable=mesh_var, foreground="#0a0",
                   font=("Consolas", 9)).pack(anchor="w", pady=(4, 0))
         peers_var = tk.StringVar(value="")
@@ -1197,7 +1196,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                               font=("Consolas", 9), foreground="#444")
         peers_lbl.pack(anchor="w", pady=(0, 6))
 
-        ttk.Label(host, text="Which IP will friends connect to?",
+        ttk.Label(host, text="朋友应连接哪个地址？",
                   font=("Segoe UI", 11, "bold")).pack(anchor="w")
         ipframe = ttk.Frame(host)
         ipframe.pack(fill="x", pady=4)
@@ -1210,7 +1209,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                 sel_ip.set(ip)  # preselect top-priority option
         override_row = ttk.Frame(host)
         override_row.pack(fill="x", pady=(4, 8))
-        ttk.Label(override_row, text="or type any IP:").pack(side="left")
+        ttk.Label(override_row, text="或手动输入地址：").pack(side="left")
         override_var = tk.StringVar()
         ttk.Entry(override_row, textvariable=override_var, width=22).pack(side="left", padx=6)
 
@@ -1221,11 +1220,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         btnrow = ttk.Frame(host)
         btnrow.pack(fill="x")
-        start_btn = ttk.Button(btnrow, text="Start Server")
+        start_btn = ttk.Button(btnrow, text="启动服务器")
         start_btn.pack(side="left")
-        stop_btn = ttk.Button(btnrow, text="Stop Server", state="disabled")
+        stop_btn = ttk.Button(btnrow, text="停止服务器", state="disabled")
         stop_btn.pack(side="left", padx=6)
-        hostplay_btn = ttk.Button(btnrow, text="Host + Play")
+        hostplay_btn = ttk.Button(btnrow, text="创建并游玩")
         hostplay_btn.pack(side="left", padx=6)
 
         host_log = scrolledtext.ScrolledText(host, height=12, wrap="word", state="disabled")
@@ -1235,6 +1234,8 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         def hlog(line):
             fmt = clog.info(line)   # timestamped + leveled (also persisted)
+            if fmt is None:
+                return
             host_log.configure(state="normal")
             host_log.insert("end", fmt + "\n")
             host_log.see("end")
@@ -1333,7 +1334,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                            + (f"   —   unified mesh: {mesh_ip}" if mesh_ip else ""))
             if not banner.winfo_ismapped():
                 banner.pack(fill="x", pady=6, before=btnrow)
-            hlog(f"[Host] Starting server ({kind}), advertising {advertise} ...")
+            hlog(f"[服务器] 正在启动（{kind}），发布地址 {advertise}…")
             clog.info("server cmd: %s", " ".join(cmd))
             if mesh_ip:
                 clog.info("mesh: MH3U_ADVERTISE=%s (unified room virtual IP)", advertise)
@@ -1347,7 +1348,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                     stdin=subprocess.DEVNULL, text=True, bufsize=1,
                     creationflags=flags)
             except OSError as e:
-                hlog(f"[Host] ERROR starting server: {e}")
+                hlog(f"[服务器] 启动失败：{e}")
                 return
             proc_holder["proc"] = proc
             start_btn.configure(state="disabled")
@@ -1372,16 +1373,16 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         def start_server(ip=None, also_play=False):
             if proc_holder["proc"] is not None:
-                hlog("[Host] Server already running.")
+                hlog("[服务器] 服务器已在运行。")
                 return
             ip = ip or chosen_ip()
             cmd, kind = build_server_command(ROOT_DIR)
             if not cmd:
-                hlog("[Host] ERROR: no server.exe or server.py found.")
+                hlog("[服务器] 未找到 server.exe 或 server.py。")
                 return
             start_btn.configure(state="disabled")
             hostplay_btn.configure(state="disabled")
-            hlog(f"[Host] Preparing to host for {ip} ...")
+            hlog(f"[服务器] 正在为地址 {ip} 准备服务…")
 
             def worker():
                 ok, advertise, mesh_ip = start_server_mesh(ip)
@@ -1399,7 +1400,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             threading.Thread(target=worker, daemon=True).start()
 
         def on_server_exit():
-            hlog("[Host] Server stopped.")
+            hlog("[服务器] 服务器已停止。")
             proc_holder["proc"] = None
             start_btn.configure(state="normal")
             stop_btn.configure(state="disabled")
@@ -1437,11 +1438,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             proc = proc_holder["proc"]
             if proc is None:
                 return
-            hlog("[Host] Stopping server ...")
+            hlog("[服务器] 正在停止服务器…")
             try:
                 _kill_proc_tree(proc)
             except Exception as e:
-                hlog(f"[Host] stop error: {e}")
+                hlog(f"[服务器] 停止失败：{e}")
 
         def host_and_play():
             # Host the server AND play on the same PC. The mesh (if up) gives
@@ -1468,13 +1469,13 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
             return
         if is_running(CEMU_EXE) or is_running(SERVER_EXE):
             messagebox.showwarning(
-                APP_TITLE, "Close Cemu and the server before updating.")
+                APP_TITLE, "更新前请先关闭 Cemu 和服务器。")
             return
         update_btn.configure(state="disabled")
         win = tk.Toplevel(app)
-        win.title("Updating")
+        win.title("正在更新")
         win.geometry("380x120")
-        ttk.Label(win, text=f"Downloading update {state['remote_tag']} …").pack(pady=8)
+        ttk.Label(win, text=f"正在下载更新 {state['remote_tag']}…").pack(pady=8)
         pb = ttk.Progressbar(win, length=340, mode="determinate")
         pb.pack(pady=4)
         pstat = tk.StringVar(value="")
@@ -1509,19 +1510,19 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
                                      if getattr(sys, "frozen", False) else "MH3U_Online.exe")
                     bat = write_self_replace_bat(ROOT_DIR, launcher_name)
                     app.after(0, lambda: (messagebox.showinfo(
-                        APP_TITLE, "Update ready — the launcher will restart."),
+                        APP_TITLE, "更新已就绪，启动器将重新启动。"),
                         subprocess.Popen(["cmd", "/c", str(bat)],
                                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)),
                         app.destroy()))
                 else:
                     app.after(0, lambda: (messagebox.showinfo(
-                        APP_TITLE, f"Updated to {state['remote_tag']}."),
-                        ver_var.set(f"version {state['remote_tag']}"),
-                        update_var.set("up to date"),
+                        APP_TITLE, f"已更新到 {state['remote_tag']}。"),
+                        ver_var.set(f"版本 {state['remote_tag']}"),
+                        update_var.set("已是最新版本"),
                         win.destroy()))
             except Exception as e:
                 app.after(0, lambda: (messagebox.showerror(
-                    APP_TITLE, f"Update failed: {e}"), win.destroy(),
+                    APP_TITLE, f"更新失败：{e}"), win.destroy(),
                     update_btn.configure(state="normal")))
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1531,7 +1532,7 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
         try:
             tag, assets = fetch_latest_release()
         except Exception:
-            app.after(0, lambda: update_var.set("update check failed — offline?"))
+            app.after(0, lambda: update_var.set("更新检查失败，请检查网络"))
             return
         state["remote_tag"] = tag
         state["assets"] = assets
@@ -1540,11 +1541,11 @@ def _run_gui(smoke=False, auto_join=False, auto_host=False,
 
         def show():
             if newer:
-                update_var.set(f"Update {tag} available")
+                update_var.set(f"发现更新 {tag}")
                 update_btn.pack(side="left", padx=8)
             else:
-                update_var.set("up to date" if local_ver != "unknown"
-                               else f"latest is {tag}")
+                update_var.set("已是最新版本" if local_ver != "unknown"
+                               else f"最新版本为 {tag}")
         app.after(0, show)
 
     threading.Thread(target=check_updates, daemon=True).start()
